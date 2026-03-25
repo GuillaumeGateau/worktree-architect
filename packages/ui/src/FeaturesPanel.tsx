@@ -9,6 +9,7 @@ import {
   postFeatureCancel,
   postFeatureStart,
 } from "./api";
+import { FooB } from "./FooB";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
 
@@ -236,6 +237,9 @@ export function FeaturesPanel(props: {
       </div>
 
       <div className="features-detail-col">
+        <div className="muted-sm" data-testid="foo-b-marker">
+          {FooB}
+        </div>
         {!selectedId ? (
           <div className="table-wrap empty">Select a feature run to see the plan and activity.</div>
         ) : detailQ.isLoading ? (
