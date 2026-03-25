@@ -896,6 +896,49 @@ a.btn-primary {
   transform-origin: 50% 65%;
 }
 
+.agent-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.stage-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.6rem;
+}
+
+.stage-node {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.stage-node-ordinal {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.stage-node-title {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.stage-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.6rem;
+  align-items: end;
+}
+
 @keyframes agent-walk {
   from {
     transform: rotate(-5deg) translateY(0);
