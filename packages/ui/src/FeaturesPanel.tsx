@@ -11,6 +11,7 @@ import {
 } from "./api";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
+import { FooA } from "./FooA";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 
@@ -203,6 +204,7 @@ export function FeaturesPanel(props: {
     <div className="features-layout">
       <div className="features-list-col">
         <h2 className="section-title">Feature runs</h2>
+        <p className="muted-sm">FooA marker: {FooA}</p>
         {featuresQ.error && (
           <div className="error-banner" role="alert">
             Could not load features: {(featuresQ.error as Error).message}
