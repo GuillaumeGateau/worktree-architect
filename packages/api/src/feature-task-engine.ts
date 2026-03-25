@@ -82,10 +82,11 @@ function buildTaskPrompt(opts: {
   repoContext?: string;
   fileContentContext?: string;
   activityBaseUrl?: string;
+  /** The exact branch name passed to the Cursor API — agent must push to this. */
+  taskBranch: string;
 }): string {
   const { task, allTasks, featureId } = opts;
   const otherTasks = allTasks.filter((t) => t.id !== task.id);
-  const branch = `orch-task-${featureId.slice(0, 8)}-${task.id}`;
 
   const lines = [
     `# Task: ${task.title}`,
@@ -133,7 +134,7 @@ function buildTaskPrompt(opts: {
     `2. Make the minimal targeted edits needed for this task.`,
     `3. \`git add -A && git commit -m "feat: <what you did>"\` — commit after each file you change.`,
     `4. \`git push -u origin HEAD\` — push when done.`,
-    `5. Branch name: \`${branch}\``,
+    `5. You are already on branch \`${opts.taskBranch}\` — do NOT switch branches. Just commit and push.`,
     ``,
     `**If you are unsure about anything, commit your best attempt anyway. A partial commit is required.**`,
   );
@@ -333,6 +334,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
       repoContext: fileContentContext ? undefined : repoContext,
       fileContentContext,
       activityBaseUrl,
+      taskBranch,
     });
 
     void (async () => {
