@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
+import {
+  deriveAgentStageState,
+  extractCursorAgentId,
+  filterAndReverseActivity,
+  sortStepsByOrdinal,
+  toHumanStatusLabel,
+} from "./feature-view-utils";
 
 describe("feature-view-utils", () => {
   it("sorts steps by ordinal", () => {
@@ -20,5 +26,110 @@ describe("feature-view-utils", () => {
     ];
     expect(filterAndReverseActivity(rows, "all").map((r) => r.id)).toEqual(["3", "2", "1"]);
     expect(filterAndReverseActivity(rows, "agent").map((r) => r.id)).toEqual(["3", "1"]);
+  });
+
+  it("extracts cursor agent ids from launch urls", () => {
+    expect(extractCursorAgentId("https://cursor.com/agents/agt_ABC123xyz")).toBe("agt_ABC123xyz");
+    expect(extractCursorAgentId("https://cursor.com/team/demo/agent/agent_789XYZ?tab=activity")).toBe(
+      "agent_789XYZ"
+    );
+  });
+
+  it("humanizes common activity labels", () => {
+    expect(
+      toHumanStatusLabel(
+        "agent",
+        'L2 agent launched for task [0] "Derive figure state" — https://cursor.com/agents/agt_123456 (branch: orch-task)'
+      )
+    ).toBe("Starting task 0");
+    expect(toHumanStatusLabel("tool", 'L2 task [1] "Wire stage" completed.')).toBe("Done ✓");
+    expect(toHumanStatusLabel("plan", "All L2 tasks completed. Launching merge auditor…")).toBe(
+      "Starting merge audit"
+    );
+  });
+
+  it("derives task and merge figures from activity feed", () => {
+    const steps = [
+      { id: "step-0", ordinal: 0 },
+      { id: "step-1", ordinal: 1 },
+    ];
+    const activity = [
+      {
+        id: "a3",
+        kind: "tool",
+        message: 'L2 task [0] "Derive figure state" completed.',
+        stepId: "step-0",
+        createdAt: "2026-03-25T10:02:00.000Z",
+      },
+      {
+        id: "a1",
+        kind: "agent",
+        message:
+          'L2 agent launched for task [0] "Derive figure state" — https://cursor.com/agents/agt_123456 (branch: orch-task)',
+        createdAt: "2026-03-25T10:00:00.000Z",
+      },
+      {
+        id: "a2",
+        kind: "tool",
+        message: "Running tests…",
+        stepId: "step-0",
+        createdAt: "2026-03-25T10:01:00.000Z",
+      },
+      {
+        id: "a4",
+        kind: "merge",
+        message: "Merge auditor launched — https://cursor.com/agents/agt_auditor",
+        createdAt: "2026-03-25T10:03:00.000Z",
+      },
+    ];
+
+    const derived = deriveAgentStageState(activity, steps);
+    const taskFigure = derived.figures.find((f) => f.figureId === "task-0");
+    const auditor = derived.figures.find((f) => f.figureId === "merge-auditor");
+
+    expect(taskFigure).toMatchObject({
+      figureId: "task-0",
+      role: "agent",
+      state: "done",
+      statusLabel: "Done ✓",
+      taskOrdinal: 0,
+      stepId: "step-0",
+      stepOrdinal: 0,
+      agentId: "agt_123456",
+    });
+    expect(derived.agentIdToFigure).toEqual({ agt_123456: "task-0" });
+    expect(auditor).toMatchObject({
+      figureId: "merge-auditor",
+      role: "auditor",
+      state: "working",
+      statusLabel: "Merge audit running",
+    });
+  });
+
+  it("marks note finished events as done for task figures", () => {
+    const derived = deriveAgentStageState(
+      [
+        {
+          id: "a1",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [1] "Wire stage" — https://cursor.com/agents/agt_task1 (branch: orch-task)',
+          createdAt: "2026-03-25T11:00:00.000Z",
+        },
+        {
+          id: "a2",
+          kind: "note",
+          message: "Task finished successfully.",
+          stepId: "step-1",
+          createdAt: "2026-03-25T11:01:00.000Z",
+        },
+      ],
+      [{ id: "step-1", ordinal: 1 }]
+    );
+    expect(derived.figures.find((f) => f.figureId === "task-1")).toMatchObject({
+      figureId: "task-1",
+      state: "done",
+      statusLabel: "Done ✓",
+    });
   });
 });
