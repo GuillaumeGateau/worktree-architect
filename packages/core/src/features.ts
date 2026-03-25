@@ -65,6 +65,30 @@ export const FeatureStepSchema = z.object({
 });
 export type FeatureStep = z.infer<typeof FeatureStepSchema>;
 
+export const FeatureTaskStatusSchema = z.enum([
+  "pending",
+  "active",
+  "done",
+  "failed",
+  "blocked",
+]);
+export type FeatureTaskStatus = z.infer<typeof FeatureTaskStatusSchema>;
+
+export const FeatureTaskSchema = z.object({
+  id: z.string(),
+  featureId: z.string(),
+  ordinal: z.number().int().nonnegative(),
+  title: z.string(),
+  summary: z.string().optional(),
+  dependsOn: z.array(z.string()),
+  status: FeatureTaskStatusSchema,
+  agentId: z.string().optional(),
+  branch: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type FeatureTask = z.infer<typeof FeatureTaskSchema>;
+
 export const ActivityEventSchema = z.object({
   id: z.string(),
   featureId: z.string(),
