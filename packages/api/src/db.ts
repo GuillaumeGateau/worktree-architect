@@ -51,6 +51,19 @@ export function openDb(sqlitePath: string): Database.Database {
       FOREIGN KEY (feature_id) REFERENCES feature_runs(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_feature_steps_feature ON feature_steps(feature_id);
+    CREATE TABLE IF NOT EXISTS feature_tasks (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL REFERENCES feature_runs(id),
+      ordinal INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT,
+      depends_on TEXT DEFAULT "[]",
+      status TEXT NOT NULL DEFAULT "pending",
+      agent_id TEXT,
+      branch TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS activity_events (
       id TEXT PRIMARY KEY,
       feature_id TEXT NOT NULL,
