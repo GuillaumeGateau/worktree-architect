@@ -1,0 +1,26 @@
+---
+description: Tri-Tier Orchestration OS — contracts, isolation, orchestrator as control plane
+alwaysApply: true
+---
+
+# Orchestration OS — Manifesto
+
+## Principles
+
+- **Contract-driven:** Prefer `FEATURE_GOALS.md` → `INTERFACE_CONTRACT.md` → executable maps before large implementation swings.
+- **Isolation:** Workers stay in dedicated git worktrees when using tiered flows; avoid cross-worktree edits.
+- **Orchestrator:** The local Orchestration OS process (SQLite + dashboard) is the **live** control plane for job state. **Git + Markdown + PRs** are the durable narrative; do not require a central Postgres for this stack.
+- **Semantic alignment:** Merges must match contracts and tests, not only clean conflict markers.
+
+## Tiers (when using tri-tier mode)
+
+| Tier | Role |
+|------|------|
+| L0 Director | Clarifies intent; writes testable success criteria; no app code. |
+| L1 Architect | Contracts, queues, worktrees; human approves `INTERFACE_CONTRACT.md` before L2. |
+| L2 Worker | Executes inside assigned worktree + contract slice. |
+| Auditors | Cleansing, semantic merge checks, janitor, doc updates (see skills). |
+
+## Discovery
+
+Before calling the orchestrator HTTP API from automation, resolve **`baseUrl`**: run `orchestrator url` or read `.orchestrator/instance.json` in the project root.

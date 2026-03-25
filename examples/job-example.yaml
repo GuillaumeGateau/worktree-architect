@@ -1,0 +1,6 @@
+role: demo
+contractVersion: 1
+branch: feature/example
+worktreePath: ../.cursor-worktrees/example
+payload:
+  note: Example enqueue spec for `orchestrator job enqueue`

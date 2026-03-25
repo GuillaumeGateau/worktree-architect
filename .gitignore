@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.DS_Store
+coverage/
+python/**/__pycache__/
+python/**/*.egg-info/
+python/.venv/
+*.db
+*.db-wal
+*.db-shm
+
+# Disposable local test apps (see docs/TESTING.md)
+test-apps/
+
+# Orchestration OS
+.orchestrator/instance.json
+.orchestrator/*.db
+.orchestrator/*.db-wal
+.orchestrator/*.db-shm
+.orchestrator/logs/
+.orchestrator/STATUS.md

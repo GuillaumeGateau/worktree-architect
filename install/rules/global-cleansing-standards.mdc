@@ -1,0 +1,12 @@
+---
+description: Security, lint hygiene, DRY — for workers and cleanser skill
+globs: "**/*"
+alwaysApply: false
+---
+
+# Global cleansing standards
+
+- No secrets in source; validate at system boundaries.
+- Remove debug `console.log` / prints before handoff unless structured logging is contractually required.
+- Run project formatters and linters; fix or justify warnings tied to real defects.
+- Keep public types and APIs aligned with `INTERFACE_CONTRACT.md` / predictive maps when those files exist.

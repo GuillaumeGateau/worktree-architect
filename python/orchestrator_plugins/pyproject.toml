@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orchestrator-plugins"
+version = "0.1.0"
+description = "Python plugins and subprocess helpers for Orchestration OS"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+orch-plugin = "orchestrator_plugins.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orchestrator_plugins"]
+only-include = ["src/orchestrator_plugins"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

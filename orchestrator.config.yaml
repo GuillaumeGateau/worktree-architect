@@ -1,0 +1,6 @@
+# Orchestration OS — project config
+maxParallelWorkers: 8
+testCommand: "npm test"
+lintCommand: "npm run lint"
+sqlitePath: ".orchestrator/orchestrator.db"
+statusMdPath: ".orchestrator/STATUS.md"

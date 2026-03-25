@@ -1,0 +1,21 @@
+{
+  "name": "orch-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Orchestration OS — monorepo for orchestrator packages and Cursor install bundle",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @orch-os/core && npm run build -w @orch-os/api && npm run build -w @orch-os/ui && npm run build -w @orch-os/cli",
+    "test": "npm run test -w @orch-os/core && npm run test -w @orch-os/api && node tools/validate-cursor-assets.mjs",
+    "lint": "npm run build",
+    "orchestrator": "node ./packages/cli/dist/cli.js",
+    "validate:cursor": "node tools/validate-cursor-assets.mjs",
+    "test:scaffold-hangman": "node scripts/scaffold-hangman-test-app.mjs",
+    "install:cursor-global": "bash scripts/install-cursor-global.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

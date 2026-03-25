@@ -1,0 +1,8 @@
+# Optional scale profile — Redis only. Default Orchestration OS uses SQLite + SSE (no Compose required).
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    profiles:
+      - scale

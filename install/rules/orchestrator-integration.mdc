@@ -1,0 +1,16 @@
+---
+description: When orchestrator.config or .orchestrator exists — resolve API URL and use CLI patterns
+globs: "**/*"
+alwaysApply: false
+---
+
+# Orchestrator integration
+
+When this repo contains `orchestrator.config.yaml` or a `.orchestrator/` directory:
+
+1. **Resolve API base URL** before any HTTP calls:
+   - Run `orchestrator url` from the repo root, **or**
+   - Read `.orchestrator/instance.json` and use the `baseUrl` field (file is gitignored).
+2. If `apiKey` is set in `instance.json` or `ORCHESTRATOR_API_KEY` is set, send header `x-api-key`.
+3. Prefer **`orchestrator job enqueue`** / **`orchestrator job watch`** over ad-hoc curls so flags stay consistent.
+4. Do not commit `.orchestrator/instance.json` or `*.db` files.
