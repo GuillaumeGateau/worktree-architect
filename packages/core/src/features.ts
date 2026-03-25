@@ -20,6 +20,15 @@ export const StepStatusSchema = z.enum([
 ]);
 export type StepStatus = z.infer<typeof StepStatusSchema>;
 
+export const FeatureTaskStatusSchema = z.enum([
+  "pending",
+  "active",
+  "done",
+  "failed",
+  "blocked",
+]);
+export type FeatureTaskStatus = z.infer<typeof FeatureTaskStatusSchema>;
+
 export const ActivityKindSchema = z.enum([
   "plan",
   "agent",
@@ -64,15 +73,6 @@ export const FeatureStepSchema = z.object({
   updatedAt: z.string(),
 });
 export type FeatureStep = z.infer<typeof FeatureStepSchema>;
-
-export const FeatureTaskStatusSchema = z.enum([
-  "pending",
-  "active",
-  "done",
-  "failed",
-  "blocked",
-]);
-export type FeatureTaskStatus = z.infer<typeof FeatureTaskStatusSchema>;
 
 export const FeatureTaskSchema = z.object({
   id: z.string(),
