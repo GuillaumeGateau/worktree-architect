@@ -10,6 +10,7 @@ export type BuildPromptInput = {
   links?: Record<string, unknown>;
   activityBaseUrl?: string;
   repoContext?: string;
+  fileContentContext?: string;
 };
 
 export function buildCloudAgentPrompt(input: BuildPromptInput): string {
@@ -54,7 +55,9 @@ export function buildCloudAgentPrompt(input: BuildPromptInput): string {
     lines.push(``);
   }
 
-  if (input.repoContext) {
+  if (input.fileContentContext) {
+    lines.push(`## Current content of files you need to edit`, input.fileContentContext, ``);
+  } else if (input.repoContext) {
     lines.push(`## Relevant existing files`, "```", input.repoContext, "```", ``);
   }
 

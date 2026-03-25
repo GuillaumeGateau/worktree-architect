@@ -13,7 +13,7 @@
 import { nanoid } from "nanoid";
 import type Database from "better-sqlite3";
 import { join } from "node:path";
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import {
   getFeatureTasks,
   upsertFeatureTask,
@@ -28,7 +28,7 @@ import {
   scheduleCursorAgentStatusPoll,
   type FeatureStepBrief,
 } from "./cursor-cloud-agent.js";
-import { emitOrchestratorEvent, bus } from "./event-bus.js";
+import { emitOrchestratorEvent } from "./event-bus.js";
 import type { OrchestratorYamlConfig } from "./config.js";
 import type { FeatureRun } from "@orch-os/core";
 
@@ -80,6 +80,7 @@ function buildTaskPrompt(opts: {
   allTasks: FeatureTaskRecord[];
   links?: Record<string, unknown>;
   repoContext?: string;
+  fileContentContext?: string;
   activityBaseUrl?: string;
 }): string {
   const { task, allTasks, featureId } = opts;
@@ -90,7 +91,8 @@ function buildTaskPrompt(opts: {
     `# Task: ${task.title}`,
     ``,
     `You are an L2 coding agent for Orchestration OS feature \`${featureId}\`.`,
-    `**RULE: You MUST make at least one git commit and push before finishing. No commit = failed run.**`,
+    `**RULE: You MUST make at least one git commit and push before finishing.**`,
+    `**Even a partial implementation is better than nothing — commit what you have, even if incomplete.**`,
     ``,
     `## Your specific task`,
     task.title,
@@ -109,14 +111,17 @@ function buildTaskPrompt(opts: {
     lines.push(`Edit files inside \`${opts.links.targetPath as string}\`. Do not touch other tasks' files.`);
   }
 
-  if (opts.repoContext) {
+  // Inject actual file content for files the task references — this is the most important context
+  if (opts.fileContentContext) {
+    lines.push(``, `## Current content of files you need to edit`, opts.fileContentContext);
+  } else if (opts.repoContext) {
     lines.push(``, `## Existing files`, "```", opts.repoContext, "```");
   }
 
   if (otherTasks.length > 0) {
     lines.push(
       ``,
-      `## Other tasks in this feature (parallel agents handle these — do NOT touch their files)`,
+      `## Other tasks handled by parallel agents (do NOT touch their files)`,
       ...otherTasks.map((t) => `- ${t.title}`)
     );
   }
@@ -124,10 +129,13 @@ function buildTaskPrompt(opts: {
   lines.push(
     ``,
     `## How to finish`,
-    `1. Implement the task. Make targeted edits.`,
-    `2. \`git add -A && git commit -m "feat: <what you did>"\` — commit after each file.`,
-    `3. \`git push -u origin HEAD\` — push when done.`,
-    `4. Branch: \`${branch}\``,
+    `1. Read the file contents above carefully.`,
+    `2. Make the minimal targeted edits needed for this task.`,
+    `3. \`git add -A && git commit -m "feat: <what you did>"\` — commit after each file you change.`,
+    `4. \`git push -u origin HEAD\` — push when done.`,
+    `5. Branch name: \`${branch}\``,
+    ``,
+    `**If you are unsure about anything, commit your best attempt anyway. A partial commit is required.**`,
   );
 
   if (opts.activityBaseUrl) {
@@ -167,6 +175,47 @@ function buildRepoContext(cwd: string, targetPath?: string): string | undefined 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Extract file paths that look like repo paths from free text
+ * (e.g. "In packages/ui/src/FeaturesPanel.tsx, add..." → ["packages/ui/src/FeaturesPanel.tsx"])
+ */
+function extractMentionedFiles(text: string): string[] {
+  const matches = text.match(/\b(packages\/[\w/-]+\.\w+|src\/[\w/-]+\.\w+|[\w/-]+\.(ts|tsx|css|json|mjs|mts))\b/g);
+  if (!matches) return [];
+  // deduplicate and filter out obviously wrong matches
+  return [...new Set(matches)].filter(
+    (p) => !p.startsWith("node_modules") && p.includes("/")
+  );
+}
+
+/**
+ * For each file mentioned in the task text, read its content from cwd.
+ * Returns a formatted string of filename + content snippets to inject into the prompt.
+ * Caps each file at MAX_FILE_LINES lines so the prompt doesn't explode.
+ */
+function buildFileContentContext(cwd: string, taskText: string, maxLinesPerFile = 200): string {
+  const mentioned = extractMentionedFiles(taskText);
+  const snippets: string[] = [];
+
+  for (const relPath of mentioned) {
+    const abs = join(cwd, relPath);
+    if (!existsSync(abs)) continue;
+    try {
+      const raw = readFileSync(abs, "utf8");
+      const lines = raw.split("\n");
+      const truncated = lines.length > maxLinesPerFile;
+      const content = truncated
+        ? lines.slice(0, maxLinesPerFile).join("\n") + `\n… (${lines.length - maxLinesPerFile} more lines)`
+        : raw;
+      snippets.push(`### ${relPath}\n\`\`\`\n${content}\n\`\`\``);
+    } catch {
+      /* skip unreadable */
+    }
+  }
+
+  return snippets.join("\n\n");
 }
 
 function getReadyTasks(tasks: FeatureTaskRecord[]): FeatureTaskRecord[] {
@@ -271,6 +320,9 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
 
   function dispatchTask(task: FeatureTaskRecord, allTasks: FeatureTaskRecord[]): void {
     const taskBranch = `${branchNamePrefix}-task-${fid.slice(0, 8)}-${task.id}`;
+    // Build file content context from files mentioned in the task title + summary
+    const taskText = [task.title, task.summary ?? ""].join(" ");
+    const fileContentContext = buildFileContentContext(cwd, taskText) || undefined;
     const promptText = buildTaskPrompt({
       featureId: fid,
       featureTitle: feature.title,
@@ -278,7 +330,8 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
       task,
       allTasks,
       links,
-      repoContext,
+      repoContext: fileContentContext ? undefined : repoContext,
+      fileContentContext,
       activityBaseUrl,
     });
 
