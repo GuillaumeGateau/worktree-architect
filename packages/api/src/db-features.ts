@@ -56,6 +56,36 @@ export function rowToActivity(row: Record<string, unknown>): ActivityEvent {
   };
 }
 
+export type FeatureTaskRecord = {
+  id: string;
+  featureId: string;
+  ordinal: number;
+  title: string;
+  summary?: string;
+  dependsOn: string;
+  status: string;
+  agentId?: string;
+  branch?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
+  return {
+    id: String(row.id),
+    featureId: String(row.feature_id),
+    ordinal: Number(row.ordinal),
+    title: String(row.title),
+    summary: row.summary ? String(row.summary) : undefined,
+    dependsOn: row.depends_on ? String(row.depends_on) : "[]",
+    status: String(row.status),
+    agentId: row.agent_id ? String(row.agent_id) : undefined,
+    branch: row.branch ? String(row.branch) : undefined,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function listFeatures(db: Database.Database): FeatureRun[] {
   const rows = db
     .prepare(
@@ -351,4 +381,59 @@ export function listActivity(
         .all(featureId, limit) as Record<string, unknown>[]);
   const events = rows.map(rowToActivity);
   return since ? events : events.reverse();
+}
+
+export function getFeatureTasks(
+  db: Database.Database,
+  featureId: string
+): FeatureTaskRecord[] {
+  const rows = db
+    .prepare(
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+       FROM feature_tasks WHERE feature_id = ? ORDER BY ordinal ASC`
+    )
+    .all(featureId) as Record<string, unknown>[];
+  return rows.map(rowToFeatureTask);
+}
+
+export function upsertFeatureTask(
+  db: Database.Database,
+  task: FeatureTaskRecord
+): FeatureTaskRecord {
+  const now = new Date().toISOString();
+  const createdAt = task.createdAt ?? now;
+  const updatedAt = task.updatedAt ?? now;
+  db.prepare(
+    `INSERT INTO feature_tasks (id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       feature_id = excluded.feature_id,
+       ordinal = excluded.ordinal,
+       title = excluded.title,
+       summary = excluded.summary,
+       depends_on = excluded.depends_on,
+       status = excluded.status,
+       agent_id = excluded.agent_id,
+       branch = excluded.branch,
+       updated_at = excluded.updated_at`
+  ).run(
+    task.id,
+    task.featureId,
+    task.ordinal,
+    task.title,
+    task.summary ?? null,
+    task.dependsOn ?? "[]",
+    task.status ?? "pending",
+    task.agentId ?? null,
+    task.branch ?? null,
+    createdAt,
+    updatedAt
+  );
+  const row = db
+    .prepare(
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+       FROM feature_tasks WHERE id = ?`
+    )
+    .get(task.id) as Record<string, unknown>;
+  return rowToFeatureTask(row);
 }
