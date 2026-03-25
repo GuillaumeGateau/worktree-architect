@@ -14,6 +14,7 @@ import { nanoid } from "nanoid";
 import type Database from "better-sqlite3";
 import { join } from "node:path";
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import {
   getFeatureTasks,
   upsertFeatureTask,
@@ -46,7 +47,9 @@ export type TaskEngineOptions = {
   emitActivity: (featureId: string, ev: ReturnType<typeof appendActivity>) => void;
 };
 
-/** Seed feature_tasks from feature steps if not already seeded. */
+/** Seed feature_tasks from feature steps if not already seeded.
+ *  By default tasks are sequential: task N depends on N-1.
+ *  This ensures each agent sees all prior tasks' committed work. */
 export function seedTasksFromSteps(
   db: Database.Database,
   featureId: string,
@@ -56,13 +59,16 @@ export function seedTasksFromSteps(
   if (existing.length > 0) return existing;
 
   const now = new Date().toISOString();
-  const tasks: FeatureTaskRecord[] = steps.map((s) => ({
-    id: nanoid(10),
+  // Pre-generate all IDs so sequential deps can reference the previous task
+  const ids = steps.map(() => nanoid(10));
+  const tasks: FeatureTaskRecord[] = steps.map((s, idx) => ({
+    id: ids[idx],
     featureId,
     ordinal: s.ordinal,
     title: s.title,
     summary: s.summary,
-    dependsOn: "[]",
+    // Task 0 has no deps; task N depends on task N-1 (sequential by default)
+    dependsOn: idx === 0 ? "[]" : JSON.stringify([ids[idx - 1]]),
     status: "pending",
     createdAt: now,
     updatedAt: now,
@@ -196,7 +202,7 @@ function extractMentionedFiles(text: string): string[] {
  * Returns a formatted string of filename + content snippets to inject into the prompt.
  * Caps each file at MAX_FILE_LINES lines so the prompt doesn't explode.
  */
-function buildFileContentContext(cwd: string, taskText: string, maxLinesPerFile = 200): string {
+function buildFileContentContext(cwd: string, taskText: string, maxLinesPerFile = 600): string {
   const mentioned = extractMentionedFiles(taskText);
   const snippets: string[] = [];
 
@@ -217,6 +223,54 @@ function buildFileContentContext(cwd: string, taskText: string, maxLinesPerFile 
   }
 
   return snippets.join("\n\n");
+}
+
+/**
+ * Merge a completed task's branch into a per-feature integration branch.
+ * Each subsequent task uses this integration branch as ref so it sees all
+ * prior tasks' committed work.
+ *
+ * Returns the integration branch name on success, or null if merge failed.
+ */
+function mergeTaskBranchToIntegration(opts: {
+  cwd: string;
+  taskBranch: string;
+  integrationBranch: string;
+  baseRef: string; // "main" or another base — used to create the branch the first time
+}): string | null {
+  const { cwd, taskBranch, integrationBranch, baseRef } = opts;
+  try {
+    const run = (cmd: string) =>
+      execSync(cmd, { cwd, stdio: ["ignore", "pipe", "pipe"] }).toString().trim();
+
+    // Fetch the task branch
+    run(`git fetch origin ${taskBranch}`);
+
+    // Create or reset the integration branch from baseRef if it doesn't exist remotely
+    try {
+      run(`git fetch origin ${integrationBranch}`);
+      run(`git checkout -B ${integrationBranch} origin/${integrationBranch}`);
+    } catch {
+      // Integration branch doesn't exist yet — create from baseRef
+      run(`git fetch origin ${baseRef}`);
+      run(`git checkout -B ${integrationBranch} origin/${baseRef}`);
+    }
+
+    // Merge the task branch (prefer theirs on conflict to avoid blocking the pipeline)
+    run(`git merge --no-edit -X theirs origin/${taskBranch}`);
+
+    // Push the integration branch
+    run(`git push origin ${integrationBranch}`);
+
+    // Return to original HEAD to avoid leaving the repo in a detached/different branch state
+    try { run(`git checkout -`); } catch { /* ignore */ }
+
+    return integrationBranch;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[task-engine] merge integration failed: ${msg.slice(0, 200)}`);
+    return null;
+  }
 }
 
 function getReadyTasks(tasks: FeatureTaskRecord[]): FeatureTaskRecord[] {
@@ -312,6 +366,9 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
   const targetPath = links.targetPath as string | undefined;
   const repoContext = buildRepoContext(cwd, targetPath);
   const activityBaseUrl = process.env.ORCHESTRATOR_ACTIVITY_BASE_URL;
+  const integrationBranch = `${branchNamePrefix}-int-${fid.slice(0, 12)}`;
+  // currentRef is updated to the integration branch after the first task merges
+  let currentRef = ref;
 
   function log(message: string, kind: "plan" | "tool" | "agent" | "note" | "error" | "merge" = "note") {
     const ev = appendActivity(db, fid, { kind, message: message.slice(0, 4000) });
@@ -319,7 +376,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
     emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
   }
 
-  function dispatchTask(task: FeatureTaskRecord, allTasks: FeatureTaskRecord[]): void {
+  function dispatchTask(task: FeatureTaskRecord, allTasks: FeatureTaskRecord[], taskRef: string): void {
     const taskBranch = `${branchNamePrefix}-task-${fid.slice(0, 8)}-${task.id}`;
     // Build file content context from files mentioned in the task title + summary
     const taskText = [task.title, task.summary ?? ""].join(" ");
@@ -342,7 +399,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
         const launched = await launchCloudAgent({
           apiKey,
           repository,
-          ref,
+          ref: taskRef,
           model,
           branchName: taskBranch,
           promptText,
@@ -357,7 +414,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
         });
 
         log(
-          `L2 agent launched for task [${task.ordinal}] "${task.title}" — ${launched.targetUrl} (branch: ${taskBranch})`,
+          `L2 agent launched for task [${task.ordinal}] "${task.title}" — ${launched.targetUrl} (branch: ${taskBranch}, ref: ${taskRef})`,
           "agent"
         );
 
@@ -379,11 +436,12 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
           onTerminal: (status, summary) => {
             const taskStatus = status === "FINISHED" ? "done" : "failed";
             const latestTask = getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? task;
+            const completedBranch = launched.branchName ?? taskBranch;
             upsertFeatureTask(db, {
               ...latestTask,
               status: taskStatus,
               agentId: launched.id,
-              branch: launched.branchName ?? taskBranch,
+              branch: completedBranch,
               updatedAt: new Date().toISOString(),
             });
 
@@ -391,6 +449,22 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
               `L2 task [${task.ordinal}] "${task.title}" ${taskStatus === "done" ? "completed" : "FAILED"}.${summary ? ` ${summary}` : ""}`,
               taskStatus === "done" ? "tool" : "error"
             );
+
+            // Merge completed task branch into integration branch so subsequent tasks see this work
+            if (taskStatus === "done") {
+              const merged = mergeTaskBranchToIntegration({
+                cwd,
+                taskBranch: completedBranch,
+                integrationBranch,
+                baseRef: ref,
+              });
+              if (merged) {
+                currentRef = integrationBranch;
+                log(`Merged task [${task.ordinal}] into integration branch ${integrationBranch}`, "merge");
+              } else {
+                log(`Integration merge skipped for task [${task.ordinal}] (branch may have no commits)`, "note");
+              }
+            }
 
             // Continue the dispatch loop
             onTaskTerminal();
@@ -409,11 +483,11 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
     const tasks = getFeatureTasks(db, fid);
 
     if (!allTerminal(tasks)) {
-      // Dispatch any newly unblocked tasks
+      // Dispatch any newly unblocked tasks using the latest integration ref
       const ready = getReadyTasks(tasks);
       if (ready.length > 0) {
-        log(`${ready.length} task(s) now unblocked — dispatching L2 agents…`, "plan");
-        for (const t of ready) dispatchTask(t, tasks);
+        log(`${ready.length} task(s) now unblocked — dispatching L2 agent(s) using ref: ${currentRef}…`, "plan");
+        for (const t of ready) dispatchTask(t, tasks, currentRef);
       }
       return;
     }
@@ -430,6 +504,8 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
     log("All L2 tasks completed. Launching merge auditor…", "plan");
     mergeFeatureLinks(db, fid, { taskEngineStatus: "auditing" });
 
+    // Auditor gets the integration branch (which has all tasks merged into it)
+    const auditorRef = currentRef;
     const auditorBranch = `${branchNamePrefix}-audit-${fid}`.slice(0, 200);
     const promptText = buildMergeAuditorPrompt({
       featureId: fid,
@@ -444,7 +520,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
         const launched = await launchCloudAgent({
           apiKey,
           repository,
-          ref,
+          ref: auditorRef,
           model,
           branchName: auditorBranch,
           promptText,
@@ -518,5 +594,5 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
     `Dispatching ${ready.length} parallel L2 agent(s): ${ready.map((t) => `"${t.title}"`).join(", ")}`,
     "plan"
   );
-  for (const t of ready) dispatchTask(t, tasks);
+  for (const t of ready) dispatchTask(t, tasks, currentRef);
 }
