@@ -57,10 +57,12 @@ export async function createWorktreeForFeature(opts: {
     return { ok: false, error: `mkdir failed: ${(e as Error).message}` };
   }
 
+  // Use --no-checkout so git doesn't try to write IDE/OS-protected paths (e.g. .cursor/) from HEAD.
+  // The hook/agent uses ORCH_CWD (repo root) for file access; the worktree provides git isolation only.
   try {
     await execFileAsync(
       "git",
-      ["-C", repoRoot, "worktree", "add", "-b", branchName, worktreePath, "HEAD"],
+      ["-C", repoRoot, "worktree", "add", "--no-checkout", "-b", branchName, worktreePath, "HEAD"],
       { encoding: "utf8" }
     );
   } catch (e) {
