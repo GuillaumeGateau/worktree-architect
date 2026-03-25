@@ -4,3 +4,32 @@ testCommand: "npm test"
 lintCommand: "npm run lint"
 sqlitePath: ".orchestrator/orchestrator.db"
 statusMdPath: ".orchestrator/STATUS.md"
+
+# Feature Start: git worktree per run + default worker script (see docs/FEATURE_EXECUTION.md).
+# featureWorktree:
+#   enabled: true
+#   root: ".orchestrator/feature-worktrees"
+#   branchPrefix: "orch-feature"
+#   spawnDefaultHook: true
+#   openWithCursor: false
+
+# Default ON: if CURSOR_API_KEY is set and git remote origin is GitHub, Start launches a Cursor Cloud Agent without uncommenting cursorCloudAgent.
+# Set false to only launch cloud when cursorCloudAgent.enabled is explicitly true.
+# autoCursorCloudAgentOnStart: false
+
+# Optional: explicit Cursor Cloud (overrides / augments auto — see docs/FEATURE_EXECUTION.md).
+# cursorCloudAgent:
+#   enabled: true
+#   repository: "https://github.com/your-org/your-repo"
+#   ref: "main"
+#   apiKeyEnv: "CURSOR_API_KEY"
+#   branchNamePrefix: "orch-feature"
+#   pollStatus: true
+#   pollIntervalSeconds: 30
+#   # model: "default"
+
+# Optional: local script after Start (used if cloud agent is not enabled or not configured).
+# featureStartCommand: 'echo "Feature {{featureId}}"'
+
+# Optional: public base URL so a cloud agent can POST activity (e.g. ngrok). Not set by default.
+# ORCHESTRATOR_ACTIVITY_BASE_URL=https://your-tunnel.example.com

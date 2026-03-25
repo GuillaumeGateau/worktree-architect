@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "vitest run"
   },
   "dependencies": {
     "@orch-os/core": "0.1.0",
@@ -21,6 +22,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.8.2",
-    "vite": "^6.2.1"
+    "vite": "^6.2.1",
+    "vitest": "^3.0.8"
   }
 }

@@ -19,7 +19,7 @@ npm run orchestrator -- start
 ```
 
 2. The terminal prints a URL like **`http://127.0.0.1:452xx/`**. Open it in a browser.
-3. Confirm you see **Orchestration OS** with **SSE connected** and an **empty jobs table** (waiting state).
+3. Confirm you see **Orchestration OS** with **SSE connected**, the **Features** tab, and an **empty feature list** until you create a run (or switch to **Jobs** for the legacy table).
 
 ### After a job is enqueued (stuck on “queued”?)
 
@@ -37,6 +37,22 @@ npm run orchestrator -- job patch "$JOB_ID" --status succeeded
 ```
 
 Invalid transitions return **400** from the API.
+
+### Feature runs (plan → Start)
+
+With the server running:
+
+```bash
+npm run orchestrator -- feature create --title "Smoke feature"
+```
+
+Refresh the dashboard **Features** tab — select the run, confirm **Start** is available, click **Start** (or run `npm run orchestrator -- feature start <id>`). Append activity from the CLI:
+
+```bash
+npm run orchestrator -- feature activity <id> --kind agent -m "Smoke OK"
+```
+
+The activity list should update live over SSE.
 
 To print the URL again (e.g. for agents):
 
@@ -75,6 +91,14 @@ rm -rf test-apps
 rm -rf .orchestrator/*.db .orchestrator/instance.json 2>/dev/null
 ```
 
+## Automated tests (monorepo)
+
+```bash
+npm run test
+```
+
+Runs **Vitest** in `@orch-os/core`, `@orch-os/api` (including feature HTTP lifecycle), `@orch-os/ui` (lightweight helpers for the feature stepper/activity ordering), and **validates** Cursor skill frontmatter under `install/skills/`.
+
 ## What this does *not* test (yet)
 
-The orchestrator **tracks jobs**; it does **not** auto-spawn Cursor agents to implement “create hangman.” A full E2E would be: enqueue → external worker/agent → PATCH job to `running`/`succeeded`. The scaffold + enqueue flow validates **UI + API + SQLite + SSE**.
+The orchestrator **tracks jobs and feature runs**; it does **not** auto-spawn Cursor agents to implement “create hangman.” A full E2E would be: enqueue or `/build-feature` → external worker/agent → PATCH job / activity events. The scaffold + enqueue flow validates **UI + API + SQLite + SSE** for jobs; feature tests cover **create → start → activity** over HTTP.

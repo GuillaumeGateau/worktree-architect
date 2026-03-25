@@ -2,6 +2,8 @@
 
 ## 1. Install global Cursor assets (once per machine)
 
+This writes to **`~/.cursor/`** (your **home** directory, e.g. `/Users/you/.cursor` — not inside the app repo). Slash commands like **`/build-feature`** then appear in **any** Cursor project.
+
 From the `orch-os` repository, use the installer (recommended — see **[CURSOR_GLOBAL_INSTALL.md](CURSOR_GLOBAL_INSTALL.md)**):
 
 ```bash

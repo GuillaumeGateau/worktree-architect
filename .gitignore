@@ -15,7 +15,9 @@ python/.venv/
 test-apps/
 
 # Orchestration OS
+.orchestrator/*.json
 .orchestrator/instance.json
+.orchestrator/feature-worktrees/
 .orchestrator/*.db
 .orchestrator/*.db-wal
 .orchestrator/*.db-shm

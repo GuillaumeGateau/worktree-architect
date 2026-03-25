@@ -8,9 +8,10 @@
   ],
   "scripts": {
     "build": "npm run build -w @orch-os/core && npm run build -w @orch-os/api && npm run build -w @orch-os/ui && npm run build -w @orch-os/cli",
-    "test": "npm run test -w @orch-os/core && npm run test -w @orch-os/api && node tools/validate-cursor-assets.mjs",
+    "test": "npm run test -w @orch-os/core && npm run test -w @orch-os/api && npm run test -w @orch-os/ui && node tools/validate-cursor-assets.mjs",
     "lint": "npm run build",
     "orchestrator": "node ./packages/cli/dist/cli.js",
+    "orch:verify-remote": "node ./scripts/verify-github-orch-sync.mjs",
     "validate:cursor": "node tools/validate-cursor-assets.mjs",
     "test:scaffold-hangman": "node scripts/scaffold-hangman-test-app.mjs",
     "install:cursor-global": "bash scripts/install-cursor-global.sh"

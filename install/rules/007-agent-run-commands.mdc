@@ -1,0 +1,11 @@
+---
+description: Run npm/orchestrator/shell commands in the agent environment yourself; do not ask the user to paste commands into their terminal unless execution is impossible (sandbox block, user opt-out).
+globs: "**/*"
+alwaysApply: true
+---
+
+# Execute commands; do not delegate to the user
+
+1. When something needs **`npm`**, **`orchestrator`**, **`bash`**, installs, builds, tests, or **`scripts/install-cursor-global.sh`**, **run it** with the agent’s execution tools.
+2. If the sandbox blocks an action (e.g. writing under `~/.cursor`), **request the needed permission** and retry — do not default to “please run this in your terminal” unless the user explicitly prefers that or the environment cannot run commands at all.
+3. After running commands, summarize results briefly. Avoid long “copy and paste this block” instructions when you can execute them instead.

@@ -14,3 +14,33 @@ export {
   canTransition,
   nextStatuses,
 } from "./state-machine.js";
+export {
+  FeatureStatusSchema,
+  type FeatureStatus,
+  StepStatusSchema,
+  type StepStatus,
+  ActivityKindSchema,
+  type ActivityKind,
+  FeatureStepInputSchema,
+  type FeatureStepInput,
+  FeatureRunSchema,
+  type FeatureRun,
+  FeatureStepSchema,
+  type FeatureStep,
+  ActivityEventSchema,
+  type ActivityEvent,
+  CreateFeatureBodySchema,
+  type CreateFeatureBody,
+  PatchFeatureBodySchema,
+  type PatchFeatureBody,
+  AppendActivityBodySchema,
+  type AppendActivityBody,
+  PatchStepBodySchema,
+  type PatchStepBody,
+} from "./features.js";
+export {
+  canStartFeature,
+  canCancelFeature,
+  isFeatureTerminal,
+  nextStepStatuses,
+} from "./feature-state-machine.js";

@@ -4,10 +4,10 @@
 
 | Piece | Role |
 |-------|------|
-| `@orch-os/core` | Shared types, Zod schemas, JSON Schema export (`job-envelope.schema.json`). |
+| `@orch-os/core` | Shared types, Zod schemas, JSON Schema export (`job-envelope.schema.json`, `create-feature-body.schema.json`). |
 | `@orch-os/api` | Fastify HTTP + SQLite (`better-sqlite3`) + SSE `/api/v1/events` + static UI. |
 | `@orch-os/ui` | Vite/React dashboard (same-origin API). |
-| `@orch-os/cli` | `start`, `url`, `doctor`, `init`, `job enqueue` / `watch`. |
+| `@orch-os/cli` | `start`, `url`, `doctor`, `init`, `job …`, **`feature create|list|show|start|cancel|activity|steps`**. |
 | `orchestrator-plugins` (Python) | Optional validators / subprocess gates. |
 
 ## Data flow (default)
@@ -24,7 +24,8 @@ flowchart LR
 ```
 
 - **Jobs** persist in SQLite (`jobs`, `workers` tables).
-- **Live UI** subscribes to **SSE**; the API emits `job_created` / `job_updated` on mutations.
+- **Feature runs** persist in SQLite (`feature_runs`, `feature_steps`, `activity_events` — activity is append-only).
+- **Live UI** subscribes to **SSE** (`/api/v1/events`). Job mutations emit `job_created` / `job_updated`. Feature mutations emit `feature_created`, `feature_updated`, `step_updated`, `activity_appended`.
 - **STATUS.md** is regenerated on job writes (path from `orchestrator.config.yaml`).
 
 ## Instance file (agent discovery)
@@ -48,6 +49,13 @@ Best-effort **`lsof` + SIGTERM** on listeners (macOS/Linux). This can affect **n
 - Default bind: **127.0.0.1**.
 - Optional **`x-api-key`** when `ORCHESTRATOR_API_KEY` / `instance.json` includes `apiKey`.
 - Treat the dashboard as **local dev tooling**, not a public multi-tenant service.
+
+## Feature runs (high level)
+
+- **Create** (`POST /api/v1/features`) stores metadata + optional `steps[]` (human plan). Default status is `draft` if omitted.
+- **Start** (`POST …/start`) moves the run to `executing` and activates the first pending step (ordinal order). Optionally launches a **Cursor Cloud Agent** or **`featureStartCommand`** when configured in `orchestrator.config.yaml`. See **[FEATURE_EXECUTION.md](FEATURE_EXECUTION.md)**.
+- **Activity** (`POST …/activity`) appends timeline events (`plan`, `agent`, `tool`, `error`, `merge`, `note`) for the dashboard feed — **only when callers POST**.
+- **Dashboard**: **Features** tab (default) vs **Jobs (legacy)**; **Start** in the UI matches the API start endpoint.
 
 ## Contract versioning
 

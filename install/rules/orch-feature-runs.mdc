@@ -1,0 +1,14 @@
+---
+description: Prefer Feature Runs and /build-feature over ad-hoc jobs when the user wants a planned, gated execution flow
+globs: "**/*"
+alwaysApply: false
+---
+
+# Feature runs vs legacy jobs
+
+When the user asks to **build a feature**, **plan work**, or **track a multi-step effort** in Orchestration OS:
+
+1. Prefer **`/build-feature`** and **Feature Runs** (`orchestrator feature …`) so the dashboard shows a **plan**, **Start** gating, **steps**, and an **activity** timeline.
+2. In the **orch-os** monorepo, use **`/build-feature-test-app`** or **`/build-feature test-app …`** for disposable demos under **`test-apps/`**; use plain **`/build-feature`** for **`packages/`** and product code.
+3. Use **legacy jobs** (`orchestrator job enqueue` / job patch) for simple queue-style tasks that do not need a persisted human plan.
+4. Default to **UI Start** (or explicit user request) before `orchestrator feature start` — do not auto-start execution unless asked.

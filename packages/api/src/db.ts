@@ -6,6 +6,7 @@ import { dirname } from "node:path";
 export function openDb(sqlitePath: string): Database.Database {
   mkdirSync(dirname(sqlitePath), { recursive: true });
   const db = new Database(sqlitePath);
+  db.pragma("foreign_keys = ON");
   db.exec(`
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY,
@@ -26,6 +27,41 @@ export function openDb(sqlitePath: string): Database.Database {
       host TEXT,
       registered_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS feature_runs (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      summary TEXT,
+      status TEXT NOT NULL,
+      risks TEXT,
+      dependencies TEXT,
+      links_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS feature_steps (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT,
+      status TEXT NOT NULL,
+      meta_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (feature_id) REFERENCES feature_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_feature_steps_feature ON feature_steps(feature_id);
+    CREATE TABLE IF NOT EXISTS activity_events (
+      id TEXT PRIMARY KEY,
+      feature_id TEXT NOT NULL,
+      step_id TEXT,
+      kind TEXT NOT NULL,
+      message TEXT NOT NULL,
+      details_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (feature_id) REFERENCES feature_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_feature ON activity_events(feature_id);
   `);
   return db;
 }

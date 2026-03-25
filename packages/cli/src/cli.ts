@@ -1,10 +1,19 @@
 #!/usr/bin/env node
+import { config as loadDotenv } from "dotenv";
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+
+loadDotenv({ path: resolve(process.cwd(), ".env") });
 import { randomBytes } from "node:crypto";
 import { Command } from "commander";
 import YAML from "yaml";
-import { buildServer } from "@orch-os/api";
+import { CreateFeatureBodySchema } from "@orch-os/core";
+import {
+  buildServer,
+  loadOrchestratorConfig,
+  resolveFeatureWorktree,
+  resolveGitRepositoryRoot,
+} from "@orch-os/api";
 import {
   readInstance,
   writeInstance,
@@ -18,8 +27,19 @@ function cwd(): string {
   return process.cwd();
 }
 
+/** Repo root for DB, config, instance.json, and Feature Start git operations. */
+function orchestratorRoot(): string {
+  return resolveGitRepositoryRoot(cwd());
+}
+
 async function cmdStart(opts: { stealPort: boolean; port?: string }) {
-  const root = cwd();
+  const root = orchestratorRoot();
+  const startedFrom = cwd();
+  if (root !== startedFrom) {
+    console.error(
+      `orchestrator: using git repo root ${root}\n(orchestrator was started from ${startedFrom}; worktree + scripts resolve from repo root)`
+    );
+  }
   const prev = readInstance(root);
   if (prev?.pid && isAlive(prev.pid)) {
     console.error(`orchestrator: stopping previous instance (pid ${prev.pid})…`);
@@ -70,7 +90,7 @@ async function cmdStart(opts: { stealPort: boolean; port?: string }) {
 }
 
 function cmdUrl(): void {
-  const inst = readInstance(cwd());
+  const inst = readInstance(orchestratorRoot());
   if (!inst) {
     console.error("orchestrator: no instance.json — start the server first");
     process.exit(1);
@@ -83,7 +103,11 @@ function cmdUrl(): void {
 }
 
 async function cmdDoctor(): Promise<void> {
-  const root = cwd();
+  const root = orchestratorRoot();
+  const startedFrom = cwd();
+  if (root !== startedFrom) {
+    console.log(`orchestrator: cwd ${startedFrom} → git root ${root}`);
+  }
   const inst = readInstance(root);
   if (!inst) {
     console.log("orchestrator: no instance.json (server not started)");
@@ -104,6 +128,46 @@ async function cmdDoctor(): Promise<void> {
     return;
   }
   console.log("orchestrator: ok", await r.json());
+
+  const feat = await fetch(new URL("/api/v1/features", inst.baseUrl), {
+    headers: headersFor(),
+  });
+  if (feat.status === 404) {
+    console.error(
+      "orchestrator: Feature Runs API missing (GET /api/v1/features → 404). Rebuild packages and restart:\n  npm run build && npm run orchestrator -- start"
+    );
+    process.exit(1);
+    return;
+  }
+  if (!feat.ok) {
+    console.error("orchestrator: features check failed", feat.status);
+    process.exit(1);
+    return;
+  }
+  console.log("orchestrator: feature API ok");
+
+  const cfg = loadOrchestratorConfig(root);
+  const fw = resolveFeatureWorktree(cfg);
+  console.log(
+    `orchestrator: Feature Start worktree — ${fw.enabled ? `enabled (root ${fw.root})` : "disabled"}; default hook ${fw.spawnDefaultHook ? "on" : "off"}`
+  );
+  console.log(
+    `orchestrator: Auto Cursor Cloud on Start — ${cfg.autoCursorCloudAgentOnStart !== false ? "on (when CURSOR_API_KEY + GitHub origin)" : "off"}`
+  );
+  const cc = cfg.cursorCloudAgent;
+  const keyEnv = cc?.apiKeyEnv ?? "CURSOR_API_KEY";
+  if (cc?.enabled && cc.repository) {
+    const hasKey = Boolean(process.env[keyEnv]?.trim());
+    console.log(
+      `orchestrator: Cursor Cloud Agent on Start — ${hasKey ? "API key present" : `missing env ${keyEnv}`} (repo ${cc.repository})`
+    );
+  } else if (cfg.featureStartCommand) {
+    console.log("orchestrator: custom featureStartCommand configured (runs on Feature Start)");
+  } else if (!fw.spawnDefaultHook) {
+    console.log(
+      "orchestrator: spawnDefaultHook is false and no featureStartCommand — only worktree/DB unless cloud is enabled"
+    );
+  }
 }
 
 function cmdInit(withRedis: boolean): void {
@@ -120,6 +184,11 @@ testCommand: "npm test"
 lintCommand: "npm run lint"
 sqlitePath: ".orchestrator/orchestrator.db"
 statusMdPath: ".orchestrator/STATUS.md"
+# Optional Feature Start automation — see docs/FEATURE_EXECUTION.md in orch-os
+# cursorCloudAgent:
+#   enabled: true
+#   repository: "https://github.com/org/repo"
+#   ref: "main"
 `;
   writeFileSync(cfgPath, body, "utf8");
   mkdirSync(orchestratorDir(root), { recursive: true });
@@ -160,7 +229,7 @@ function ensureGitignore(root: string): void {
 
 function resolveBaseUrl(flag?: string): string {
   if (flag) return flag.replace(/\/$/, "");
-  const inst = readInstance(cwd());
+  const inst = readInstance(orchestratorRoot());
   if (inst?.baseUrl) return inst.baseUrl.replace(/\/$/, "");
   if (process.env.ORCHESTRATOR_BASE_URL)
     return process.env.ORCHESTRATOR_BASE_URL.replace(/\/$/, "");
@@ -168,7 +237,7 @@ function resolveBaseUrl(flag?: string): string {
 }
 
 function headersFor(): Record<string, string> {
-  const inst = readInstance(cwd());
+  const inst = readInstance(orchestratorRoot());
   const key = process.env.ORCHESTRATOR_API_KEY ?? inst?.apiKey;
   return key ? { "x-api-key": key } : {};
 }
@@ -246,6 +315,143 @@ async function cmdJobPatch(
   console.log(JSON.stringify(await r.json(), null, 2));
 }
 
+async function readStdinJson(): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) {
+    chunks.push(c as Buffer);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+async function cmdFeatureCreate(opts: {
+  jsonFile?: string;
+  title?: string;
+  baseUrl?: string;
+}): Promise<void> {
+  let body: unknown;
+  if (opts.jsonFile) {
+    body = JSON.parse(readFileSync(opts.jsonFile, "utf8"));
+  } else if (opts.title) {
+    body = { title: opts.title, status: "draft" };
+  } else {
+    body = await readStdinJson();
+  }
+  const parsed = CreateFeatureBodySchema.safeParse(body);
+  if (!parsed.success) {
+    console.error("orchestrator: invalid feature body", parsed.error.flatten());
+    process.exit(1);
+    return;
+  }
+  const base = resolveBaseUrl(opts.baseUrl);
+  const r = await fetch(`${base}/api/v1/features`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headersFor() },
+    body: JSON.stringify(parsed.data),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: feature create failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureList(baseUrl?: string): Promise<void> {
+  const base = resolveBaseUrl(baseUrl);
+  const r = await fetch(`${base}/api/v1/features`, { headers: headersFor() });
+  if (!r.ok) {
+    console.error("orchestrator: feature list failed", r.status);
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureShow(id: string, baseUrl?: string): Promise<void> {
+  const base = resolveBaseUrl(baseUrl);
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}`, {
+    headers: headersFor(),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: feature show failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureStart(id: string, baseUrl?: string): Promise<void> {
+  const base = resolveBaseUrl(baseUrl);
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/start`, {
+    method: "POST",
+    headers: headersFor(),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: feature start failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureCancel(id: string, baseUrl?: string): Promise<void> {
+  const base = resolveBaseUrl(baseUrl);
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    headers: headersFor(),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: feature cancel failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureActivity(
+  id: string,
+  opts: { message: string; kind?: string; stepId?: string; baseUrl?: string }
+): Promise<void> {
+  const base = resolveBaseUrl(opts.baseUrl);
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/activity`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headersFor() },
+    body: JSON.stringify({
+      kind: opts.kind ?? "note",
+      message: opts.message,
+      stepId: opts.stepId,
+    }),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: activity failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
+async function cmdFeatureStepsPut(
+  id: string,
+  jsonFile: string,
+  baseUrl?: string
+): Promise<void> {
+  const body = JSON.parse(readFileSync(jsonFile, "utf8")) as { steps?: unknown[] };
+  const base = resolveBaseUrl(baseUrl);
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/steps`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", ...headersFor() },
+    body: JSON.stringify({ steps: body.steps ?? [] }),
+  });
+  if (!r.ok) {
+    console.error("orchestrator: steps put failed", r.status, await r.text());
+    process.exit(1);
+    return;
+  }
+  console.log(JSON.stringify(await r.json(), null, 2));
+}
+
 async function cmdWatch(baseFlag?: string): Promise<void> {
   const base = resolveBaseUrl(baseFlag);
   let prev = "";
@@ -293,6 +499,74 @@ program
   .option("--with-redis-compose", "Also add docker-compose.orchestrator.yml")
   .action((opts: { withRedisCompose?: boolean }) => {
     cmdInit(Boolean(opts.withRedisCompose));
+  });
+
+const feature = program.command("feature").description("Feature runs (plan → Start → activity)");
+
+feature
+  .command("create")
+  .description("Create feature from --json-file, --title, or stdin JSON")
+  .option("--json-file <path>", "CreateFeatureBody JSON file")
+  .option("--title <t>", "Minimal create: title only (draft)")
+  .option("--base-url <url>")
+  .action(async (opts) => {
+    await cmdFeatureCreate(opts);
+  });
+
+feature
+  .command("list")
+  .option("--base-url <url>")
+  .action(async (opts) => {
+    await cmdFeatureList(opts.baseUrl);
+  });
+
+feature
+  .command("show")
+  .argument("<id>")
+  .option("--base-url <url>")
+  .action(async (id, opts) => {
+    await cmdFeatureShow(id, opts.baseUrl);
+  });
+
+feature
+  .command("start")
+  .argument("<id>")
+  .option("--base-url <url>")
+  .action(async (id, opts) => {
+    await cmdFeatureStart(id, opts.baseUrl);
+  });
+
+feature
+  .command("cancel")
+  .argument("<id>")
+  .option("--base-url <url>")
+  .action(async (id, opts) => {
+    await cmdFeatureCancel(id, opts.baseUrl);
+  });
+
+feature
+  .command("activity")
+  .argument("<id>")
+  .requiredOption("-m, --message <text>")
+  .option("--kind <k>", "plan|agent|tool|error|merge|note", "note")
+  .option("--step-id <id>")
+  .option("--base-url <url>")
+  .action(async (id, opts) => {
+    await cmdFeatureActivity(id, {
+      message: opts.message,
+      kind: opts.kind,
+      stepId: opts.stepId,
+      baseUrl: opts.baseUrl,
+    });
+  });
+
+feature
+  .command("steps")
+  .argument("<id>")
+  .requiredOption("--json-file <path>", "JSON with { steps: [...] }")
+  .option("--base-url <url>")
+  .action(async (id, opts) => {
+    await cmdFeatureStepsPut(id, opts.jsonFile, opts.baseUrl);
   });
 
 const job = program.command("job").description("Job helpers");

@@ -4,6 +4,8 @@ Lightweight **local** orchestration: **SQLite** + **one Node process** serving *
 
 ## Quickstart (this monorepo)
 
+**Hands-off Feature Start:** with **`.env`** **`CURSOR_API_KEY`** and a **GitHub** `git remote origin`, **Start** launches a **Cursor Cloud Agent** automatically (implements the plan, including `test-apps/…` when set). Set **`autoCursorCloudAgentOnStart: false`** in `orchestrator.config.yaml` to disable. See [docs/FEATURE_EXECUTION.md](docs/FEATURE_EXECUTION.md).
+
 ```bash
 npm install
 npm run build
@@ -28,19 +30,41 @@ npm run orchestrator -- job enqueue examples/job-example.yaml --emit-pr-body-sni
 | [`@orch-os/cli`](packages/cli/README.md) | CLI binary `orchestrator` |
 | [`python/orchestrator_plugins`](python/orchestrator_plugins/README.md) | Python plugins |
 
-## Cursor (global)
+## Cursor (slash commands)
 
-Install **rules, skills, and slash commands** into `~/.cursor/` so they apply in **all** projects:
+**`~` means your home directory** (shell: `echo $HOME`). Cursor does **not** read `~/` from the repo; global assets must **physically exist** under `$HOME/.cursor/`.
+
+| Where | Path on disk | Who sees `/build-feature` |
+|--------|----------------|-----------------------------|
+| **Project** (committed in this repo) | `<repo>/.cursor/commands/*.md` | Anyone who opens **this** repository |
+| **Global** (one-time install) | **`~/.cursor/commands/*.md`** | **Every** workspace on your machine |
+
+- **This repo** includes `.cursor/commands/build-feature.md`, `build-feature-test-app.md`, and matching skills so slash commands work **without** running the installer.
+- **Other repos** only get the same commands if you run **`npm run install:cursor-global`** once from orch-os (copies `install/commands` → **`~/.cursor/commands`**) or you add their own `.cursor/` files.
+
+**Product vs disposable demos (this monorepo):** use **`/build-feature`** to change **`packages/`**, **`install/`**, etc. Use **`/build-feature-test-app`** or **`/build-feature test-app …`** so the agent keeps files under **`test-apps/<slug>/`** (gitignored). See **orch-build-feature** skill.
 
 - **Docs:** [docs/CURSOR_GLOBAL_INSTALL.md](docs/CURSOR_GLOBAL_INSTALL.md)
-- **One command:** `npm run install:cursor-global` (or `./scripts/install-cursor-global.sh`)
+- **Installer:** `npm run install:cursor-global`
 
-Then use **`/orchestrate-bootstrap`** and other commands in any workspace. This is separate from the **`@orch-os/*`** npm packages.
+`npm install` does **not** populate `~/.cursor/`; only the install script or committed `.cursor/` does.
+
+### Dashboard: `GET /api/v1/features` → 404
+
+The UI is newer than the **running** API process. **Rebuild and restart** from the repo root:
+
+```bash
+npm run build
+npm run orchestrator -- start
+```
+
+(`start` stops the previous instance when its PID is still recorded.) Confirm with `npm run orchestrator -- doctor`.
 
 ## Docs
 
 - [docs/NEW_PROJECT.md](docs/NEW_PROJECT.md) — adopt in a new repo  
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — ports, instance file, Redis note  
+- [docs/FEATURE_EXECUTION.md](docs/FEATURE_EXECUTION.md) — what **Start** does / does **not** do (no auto subagents)  
 - [docs/TESTING.md](docs/TESTING.md) — open the UI, disposable Hangman test app under `test-apps/` (gitignored)  
 
 ## License
