@@ -868,6 +868,43 @@ a.btn-primary {
   color: #fecaca;
 }
 
+.agent-figure {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text);
+}
+
+.agent-bubble {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  max-width: 8rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-walking {
+  animation: agent-walk 0.8s ease-in-out infinite alternate;
+  transform-origin: 50% 65%;
+}
+
+@keyframes agent-walk {
+  from {
+    transform: rotate(-5deg) translateY(0);
+  }
+  to {
+    transform: rotate(5deg) translateY(-1px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .live-dot.on {
     box-shadow: none;
@@ -875,5 +912,9 @@ a.btn-primary {
 
   .step-card {
     transition: none;
+  }
+
+  .agent-walking {
+    animation: none;
   }
 }
