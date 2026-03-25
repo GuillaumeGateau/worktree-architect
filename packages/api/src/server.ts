@@ -439,6 +439,20 @@ export async function buildServer(opts: ServerOptions) {
             if (ev) emitActivity(ev);
             emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
           } else {
+            // When the task engine is active (steps present), skip the single legacy agent.
+            // The task engine will dispatch one L2 agent per step instead.
+            const taskEngineWillRun = yamlConfig.taskEngine !== false && stepsAfter.length > 0;
+            if (taskEngineWillRun) {
+              featureStartMode = "task_engine";
+              mergeFeatureLinks(db, fid, { featureStartMode });
+              const ev = appendActivity(db, fid, {
+                kind: "plan",
+                message: `Task engine mode: ${stepsAfter.length} step(s) will be dispatched as parallel L2 agents. Skipping single feature agent.`,
+                stepId: activeStepId,
+              });
+              if (ev) emitActivity(ev);
+              cloudLaunched = false;
+            } else {
             const runRow = getFeature(db, fid)!;
             const links = runRow.linksJson
               ? (JSON.parse(runRow.linksJson) as Record<string, unknown>)
@@ -552,6 +566,7 @@ export async function buildServer(opts: ServerOptions) {
                 },
               });
             }
+            } // end else (task engine not running, use single agent)
           }
         }
       } catch (e) {

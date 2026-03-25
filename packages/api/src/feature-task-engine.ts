@@ -312,8 +312,9 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
           apiKey,
           intervalMs: pollIntervalMs,
           onUpdate: (status) => {
+            // Only update the agent's external status — don't overwrite task.status
             upsertFeatureTask(db, {
-              ...task,
+              ...(getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? task),
               agentId: launched.id,
               branch: launched.branchName ?? taskBranch,
               updatedAt: new Date().toISOString(),
