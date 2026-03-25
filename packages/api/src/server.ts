@@ -35,6 +35,9 @@ import {
   patchStep,
   appendActivity,
   listActivity,
+  getFeatureTasks,
+  upsertFeatureTask,
+  type FeatureTaskRecord,
 } from "./db-features.js";
 import {
   buildCloudAgentPrompt,
@@ -45,6 +48,7 @@ import { resolveEffectiveCursorCloudForStart } from "./effective-cursor-cloud.js
 import { spawnFeatureStartCommand } from "./feature-start-hook.js";
 import { bus, emitOrchestratorEvent } from "./event-bus.js";
 import { writeStatusMd } from "./status-md.js";
+import { startTaskEngine } from "./feature-task-engine.js";
 import {
   loadOrchestratorConfig,
   resolveFeatureWorktree,
@@ -655,6 +659,28 @@ export async function buildServer(opts: ServerOptions) {
       if (sumEv) emitActivity(sumEv);
       emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
 
+      // If the feature has steps and a cloud API key, start the parallel task engine.
+      // The engine seeds feature_tasks from steps and dispatches one L2 agent per task.
+      if (cc?.enabled && apiKey && stepsAfter.length > 0) {
+        const taskEngineEnabled = yamlConfig.taskEngine !== false;
+        if (taskEngineEnabled) {
+          const featureSnapshot = getFeature(db, fid)!;
+          startTaskEngine({
+            db,
+            feature: featureSnapshot,
+            yamlConfig,
+            apiKey,
+            repository: cc.repository.trim(),
+            ref: cc.ref,
+            branchNamePrefix: cc.branchNamePrefix ?? "orch-feature",
+            model: cc.model,
+            pollIntervalMs: Math.max(5, cc.pollIntervalSeconds) * 1000,
+            cwd,
+            emitActivity: emitActivityEvent,
+          });
+        }
+      }
+
       const finalRun = getFeature(db, fid);
       return featureToJSON(finalRun!);
     }
@@ -677,6 +703,66 @@ export async function buildServer(opts: ServerOptions) {
       return featureToJSON(updated);
     }
   );
+
+  // ---------- Tasks API ----------
+  app.get<{ Params: { id: string } }>(
+    "/api/v1/features/:id/tasks",
+    async (req, reply) => {
+      if (!getFeature(db, req.params.id)) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+      return { tasks: getFeatureTasks(db, req.params.id) };
+    }
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/v1/features/:id/tasks",
+    async (req, reply) => {
+      const feature = getFeature(db, req.params.id);
+      if (!feature) { reply.code(404).send({ error: "not_found" }); return; }
+      const body = req.body as { tasks?: unknown };
+      if (!Array.isArray(body?.tasks)) { reply.code(400).send({ error: "tasks array required" }); return; }
+      const now = new Date().toISOString();
+      const seeded = (body.tasks as { title: string; summary?: string; ordinal?: number; dependsOn?: string[] }[]).map((t, i) => {
+        const record: FeatureTaskRecord = {
+          id: nanoid(10),
+          featureId: req.params.id,
+          ordinal: t.ordinal ?? i,
+          title: t.title,
+          summary: t.summary,
+          dependsOn: JSON.stringify(t.dependsOn ?? []),
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        };
+        return upsertFeatureTask(db, record);
+      });
+      emitOrchestratorEvent({ type: "feature_updated", featureId: req.params.id });
+      return { tasks: seeded };
+    }
+  );
+
+  app.patch<{ Params: { featureId: string; taskId: string } }>(
+    "/api/v1/features/:featureId/tasks/:taskId",
+    async (req, reply) => {
+      const { featureId, taskId } = req.params;
+      const tasks = getFeatureTasks(db, featureId);
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) { reply.code(404).send({ error: "not_found" }); return; }
+      const body = req.body as { status?: string; agentId?: string; branch?: string };
+      const updated = upsertFeatureTask(db, {
+        ...task,
+        status: body.status ?? task.status,
+        agentId: body.agentId ?? task.agentId,
+        branch: body.branch ?? task.branch,
+        updatedAt: new Date().toISOString(),
+      });
+      emitOrchestratorEvent({ type: "feature_updated", featureId });
+      return updated;
+    }
+  );
+  // ---------- End Tasks API ----------
 
   app.put<{ Params: { id: string }; Body: { steps?: { title: string; summary?: string; id?: string; ordinal?: number }[] } }>(
     "/api/v1/features/:id/steps",

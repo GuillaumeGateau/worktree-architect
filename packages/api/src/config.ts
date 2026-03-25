@@ -41,6 +41,12 @@ export type OrchestratorYamlConfig = {
   autoCursorCloudAgentOnStart?: boolean;
   cursorCloudAgent?: CursorCloudAgentYamlConfig;
   featureWorktree?: FeatureWorktreeYamlConfig;
+  /**
+   * When not false (default on), Start seeds feature_tasks from steps and dispatches
+   * one L2 Cloud Agent per task, managing a dependency-aware dispatch loop.
+   * Set to false to use the legacy single-agent-per-feature mode.
+   */
+  taskEngine?: boolean;
   /** Shell string or argv; placeholders {{featureId}} {{cwd}} */
   featureStartCommand?: string | string[];
 };
