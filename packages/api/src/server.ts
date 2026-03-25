@@ -110,6 +110,15 @@ function resolveUiDist(): string {
   }
 }
 
+function emitActivityEvent(
+  featureId: string,
+  ev: ReturnType<typeof appendActivity>
+): void {
+  if (ev) {
+    emitOrchestratorEvent({ type: "activity_appended", featureId, activityId: ev.id });
+  }
+}
+
 export async function buildServer(opts: ServerOptions) {
   const cwd = opts.cwd;
   if (process.env.REDIS_URL) {
@@ -329,13 +338,7 @@ export async function buildServer(opts: ServerOptions) {
       );
 
       const emitActivity = (ev: ReturnType<typeof appendActivity>) => {
-        if (ev) {
-          emitOrchestratorEvent({
-            type: "activity_appended",
-            featureId: fid,
-            activityId: ev.id,
-          });
-        }
+        emitActivityEvent(fid, ev);
       };
 
       const activeStep = stepsAfter.find((s) => s.status === "active");
@@ -781,6 +784,49 @@ export async function buildServer(opts: ServerOptions) {
   app.addHook("onClose", async () => {
     db.close();
   });
+
+  // On startup, re-register status polls for any executing features whose cloud agent
+  // poll timer was lost (e.g. after an orchestrator restart).
+  {
+    const apiKeyEnv = yamlConfig.cursorCloudAgent?.apiKeyEnv ?? "CURSOR_API_KEY";
+    const apiKey = process.env[apiKeyEnv]?.trim();
+    if (apiKey) {
+      const executing = listFeatures(db).filter((f) => f.status === "executing");
+      for (const f of executing) {
+        const links = f.linksJson ? (JSON.parse(f.linksJson) as Record<string, unknown>) : {};
+        const agentId = links.cursorAgentId as string | undefined;
+        const agentStatus = links.cursorAgentStatus as string | undefined;
+        if (agentId && !["FINISHED", "ERROR", "EXPIRED"].includes(agentStatus ?? "")) {
+          const intervalMs = Math.max(5, yamlConfig.cursorCloudAgent?.pollIntervalSeconds ?? 30) * 1000;
+          const activeStep = listSteps(db, f.id).find((s) => s.status === "active");
+          scheduleCursorAgentStatusPoll({
+            featureId: f.id,
+            agentId,
+            apiKey,
+            intervalMs,
+            onUpdate: (status) => {
+              mergeFeatureLinks(db, f.id, { cursorAgentStatus: status });
+              emitOrchestratorEvent({ type: "feature_updated", featureId: f.id });
+            },
+            onTerminal: (status, summary) => {
+              mergeFeatureLinks(db, f.id, { cursorAgentStatus: status });
+              const msg =
+                status === "FINISHED"
+                  ? `Cursor Cloud Agent finished.${summary ? ` ${summary}` : ""}`
+                  : `Cursor Cloud Agent ${status}.${summary ? ` ${summary}` : ""}`;
+              const terminal = appendActivity(db, f.id, {
+                kind: status === "ERROR" ? "error" : "note",
+                message: msg.slice(0, 4000),
+                stepId: activeStep?.id,
+              });
+              if (terminal) emitActivityEvent(f.id, terminal);
+              emitOrchestratorEvent({ type: "feature_updated", featureId: f.id });
+            },
+          });
+        }
+      }
+    }
+  }
 
   return app;
 }

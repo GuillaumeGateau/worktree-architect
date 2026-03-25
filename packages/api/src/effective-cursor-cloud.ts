@@ -34,7 +34,7 @@ export function resolveEffectiveCursorCloudForStart(
       apiKeyEnv,
       model: explicit?.model,
       branchNamePrefix: explicit?.branchNamePrefix ?? "orch-feature",
-      pollStatus: explicit?.pollStatus ?? false,
+      pollStatus: explicit?.pollStatus ?? true,
       pollIntervalSeconds: explicit?.pollIntervalSeconds ?? 30,
     };
   }

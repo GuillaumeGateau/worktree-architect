@@ -120,7 +120,7 @@ function parseCursorCloudAgent(raw: unknown): CursorCloudAgentYamlConfig | undef
     apiKeyEnv: str(o.apiKeyEnv) ?? "CURSOR_API_KEY",
     model: str(o.model),
     branchNamePrefix: str(o.branchNamePrefix) ?? "orch-feature",
-    pollStatus: bool(o.pollStatus, false),
+    pollStatus: bool(o.pollStatus, true),
     pollIntervalSeconds: num(o.pollIntervalSeconds, 30),
   };
 }
