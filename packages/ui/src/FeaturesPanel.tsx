@@ -198,6 +198,8 @@ export function FeaturesPanel(props: {
       return null;
     return "See Activity for details";
   })();
+  const isDraftOrReady =
+    detail?.feature.status === "draft" || detail?.feature.status === "ready";
 
   return (
     <div className="features-layout">
@@ -237,7 +239,16 @@ export function FeaturesPanel(props: {
 
       <div className="features-detail-col">
         {!selectedId ? (
-          <div className="table-wrap empty">Select a feature run to see the plan and activity.</div>
+          <section className="idle-empty card" role="status" aria-live="polite">
+            <h3 className="idle-empty-title">Pick a feature run to get started</h3>
+            <p className="idle-empty-copy">
+              Select a run from the list to review its plan steps, status, and latest activity.
+            </p>
+            <p className="muted-sm idle-empty-hint">
+              Tip: draft and ready runs show the plan only. Stage activity appears once execution
+              starts.
+            </p>
+          </section>
         ) : detailQ.isLoading ? (
           <div className="table-wrap empty">Loading…</div>
         ) : detailQ.error ? (
@@ -307,7 +318,7 @@ export function FeaturesPanel(props: {
               </div>
             )}
 
-            {(detail.feature.status === "draft" || detail.feature.status === "ready") && (
+            {isDraftOrReady && (
               <div className="execution-callout" role="note">
                 <strong>What happens when you click Start</strong>
                 <p>
@@ -515,6 +526,12 @@ export function FeaturesPanel(props: {
 
             <section className="feature-plan" aria-label="Plan">
               <h3 className="subsection-title">Plan</h3>
+              {isDraftOrReady ? (
+                <p className="muted-sm plan-prestage-note">
+                  This run is <strong>{detail.feature.status}</strong>, so you are seeing plan
+                  steps only.
+                </p>
+              ) : null}
               {sortedSteps.length === 0 ? (
                 <p className="muted-sm">No steps yet. Replace the plan via the API or CLI.</p>
               ) : (
