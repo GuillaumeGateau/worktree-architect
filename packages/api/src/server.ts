@@ -441,6 +441,35 @@ export async function buildServer(opts: ServerOptions) {
               : undefined;
             const branchSafe = fid.replace(/[^a-zA-Z0-9_-]/g, "-");
             const branchName = `${cc.branchNamePrefix}-${branchSafe}`.slice(0, 200);
+
+            // Build a relevant file listing to orient the agent
+            let repoContext: string | undefined;
+            try {
+              const { readdirSync, statSync } = await import("node:fs");
+              const targetPath = (links?.targetPath as string | undefined) ?? "";
+              const scanRoot = targetPath ? join(cwd, targetPath) : cwd;
+              const collectFiles = (dir: string, depth = 0): string[] => {
+                if (depth > 2) return [];
+                const entries = readdirSync(dir, { withFileTypes: true });
+                const out: string[] = [];
+                for (const e of entries) {
+                  if (e.name.startsWith(".") || e.name === "node_modules" || e.name === "dist") continue;
+                  const rel = join(dir, e.name).replace(cwd + "/", "");
+                  if (e.isDirectory()) {
+                    out.push(...collectFiles(join(dir, e.name), depth + 1));
+                  } else if (e.isFile()) {
+                    const sz = statSync(join(dir, e.name)).size;
+                    out.push(`${rel} (${Math.round(sz / 1024)}kB)`);
+                  }
+                }
+                return out;
+              };
+              const files = collectFiles(scanRoot);
+              if (files.length > 0) repoContext = files.join("\n");
+            } catch {
+              /* non-fatal */
+            }
+
             const promptText = buildCloudAgentPrompt({
               featureId: fid,
               title: runRow.title,
@@ -452,6 +481,7 @@ export async function buildServer(opts: ServerOptions) {
               })),
               links,
               activityBaseUrl: process.env.ORCHESTRATOR_ACTIVITY_BASE_URL,
+              repoContext,
             });
             const launched = await launchCloudAgent({
               apiKey,
@@ -502,10 +532,12 @@ export async function buildServer(opts: ServerOptions) {
                 },
                 onTerminal: (status, summary) => {
                   mergeFeatureLinks(db, fid, { cursorAgentStatus: status });
+                  const featureStatus = status === "FINISHED" ? "completed" : "failed";
+                  patchFeature(db, fid, { status: featureStatus });
                   const msg =
                     status === "FINISHED"
-                      ? `Cursor Cloud Agent finished.${summary ? ` ${summary}` : ""}`
-                      : `Cursor Cloud Agent ${status}.${summary ? ` ${summary}` : ""}`;
+                      ? `Cursor Cloud Agent finished — feature auto-marked ${featureStatus}.${summary ? ` ${summary}` : ""}`
+                      : `Cursor Cloud Agent ${status} — feature auto-marked ${featureStatus}.${summary ? ` ${summary}` : ""}`;
                   const terminal = appendActivity(db, fid, {
                     kind: status === "ERROR" ? "error" : "note",
                     message: msg.slice(0, 4000),
@@ -796,6 +828,22 @@ export async function buildServer(opts: ServerOptions) {
         const links = f.linksJson ? (JSON.parse(f.linksJson) as Record<string, unknown>) : {};
         const agentId = links.cursorAgentId as string | undefined;
         const agentStatus = links.cursorAgentStatus as string | undefined;
+
+        // Agent already reached terminal — close the feature without polling
+        if (agentId && ["FINISHED", "ERROR", "EXPIRED"].includes(agentStatus ?? "")) {
+          const featureStatus = agentStatus === "FINISHED" ? "completed" : "failed";
+          patchFeature(db, f.id, { status: featureStatus });
+          const activeStep = listSteps(db, f.id).find((s) => s.status === "active");
+          const ev = appendActivity(db, f.id, {
+            kind: agentStatus === "FINISHED" ? "note" : "error",
+            message: `Startup recovery: agent already ${agentStatus} — feature auto-marked ${featureStatus}.`,
+            stepId: activeStep?.id,
+          });
+          if (ev) emitActivityEvent(f.id, ev);
+          emitOrchestratorEvent({ type: "feature_updated", featureId: f.id });
+          continue;
+        }
+
         if (agentId && !["FINISHED", "ERROR", "EXPIRED"].includes(agentStatus ?? "")) {
           const intervalMs = Math.max(5, yamlConfig.cursorCloudAgent?.pollIntervalSeconds ?? 30) * 1000;
           const activeStep = listSteps(db, f.id).find((s) => s.status === "active");
@@ -810,10 +858,12 @@ export async function buildServer(opts: ServerOptions) {
             },
             onTerminal: (status, summary) => {
               mergeFeatureLinks(db, f.id, { cursorAgentStatus: status });
+              const featureStatus = status === "FINISHED" ? "completed" : "failed";
+              patchFeature(db, f.id, { status: featureStatus });
               const msg =
                 status === "FINISHED"
-                  ? `Cursor Cloud Agent finished.${summary ? ` ${summary}` : ""}`
-                  : `Cursor Cloud Agent ${status}.${summary ? ` ${summary}` : ""}`;
+                  ? `Cursor Cloud Agent finished — feature auto-marked ${featureStatus}.${summary ? ` ${summary}` : ""}`
+                  : `Cursor Cloud Agent ${status} — feature auto-marked ${featureStatus}.${summary ? ` ${summary}` : ""}`;
               const terminal = appendActivity(db, f.id, {
                 kind: status === "ERROR" ? "error" : "note",
                 message: msg.slice(0, 4000),

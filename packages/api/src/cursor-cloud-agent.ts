@@ -9,54 +9,84 @@ export type BuildPromptInput = {
   steps: FeatureStepBrief[];
   links?: Record<string, unknown>;
   activityBaseUrl?: string;
+  repoContext?: string;
 };
 
 export function buildCloudAgentPrompt(input: BuildPromptInput): string {
-  const lines: string[] = [
-    `You are working on Orchestration OS Feature Run id=${input.featureId}.`,
-    "",
-    `## Title`,
-    input.title,
-    "",
-  ];
-  if (input.summary) {
-    lines.push("## Summary", input.summary, "");
-  }
-  lines.push(
-    "## Autonomous execution (required)",
-    "Implement this feature without waiting for the human to click anything in the orchestrator UI.",
-    "Work through the plan steps in order. When `links.targetPath` is set (e.g. `test-apps/my-slug`), create and edit files under that path in the repository.",
-    "Commit your changes on the agent branch as you make progress.",
-    ""
-  );
-  if (input.links && Object.keys(input.links).length > 0) {
-    lines.push("## Metadata (links JSON)", JSON.stringify(input.links, null, 2), "");
-  }
-  lines.push("## Plan steps (implement in order; update repo accordingly)", "");
   const ordered = [...input.steps].sort((a, b) => a.ordinal - b.ordinal);
-  ordered.forEach((s, i) => {
-    lines.push(`${i + 1}. ${s.title}${s.summary ? ` — ${s.summary}` : ""}`);
-  });
+  // Focus on the single first step — keep scope small so the agent commits and succeeds
+  const focusStep = ordered[0];
+  const remainingSteps = ordered.slice(1);
+
+  const lines: string[] = [
+    `# Your job: implement ONE task, commit and push — do not stop without committing`,
+    ``,
+    `You are a coding agent for Orchestration OS Feature \`${input.featureId}\`.`,
+    `**You MUST make at least one git commit before you finish.** If you complete your task`,
+    `without committing, this run is considered a failure.`,
+    ``,
+    `## The task you must implement NOW`,
+  ];
+
+  if (focusStep) {
+    lines.push(`**${focusStep.title}**`);
+    if (focusStep.summary) lines.push(``, focusStep.summary);
+  } else {
+    lines.push(input.title);
+    if (input.summary) lines.push(``, input.summary);
+  }
+
   lines.push(
-    "",
-    "## Reporting (optional)",
-    "If the orchestrator HTTP API is reachable from your environment, you may POST activity with:",
-    "`orchestrator feature activity <featureId> --kind agent -m \"…\"`",
-    ""
+    ``,
+    `## How to work`,
+    `1. Read the existing code in the relevant files (listed below).`,
+    `2. Implement the task above — make targeted, focused edits.`,
+    `3. **Commit after every file you change** (\`git add -A && git commit -m "feat: <what you did>"\`).`,
+    `4. Push your branch when done (\`git push -u origin HEAD\`).`,
+    `5. Do NOT implement future steps — scope strictly to the task above.`,
+    ``
   );
+
+  const targetPath = (input.links?.targetPath as string | undefined) ?? "";
+  if (targetPath) {
+    lines.push(`## Target directory: \`${targetPath}\``);
+    lines.push(`Edit files inside \`${targetPath}\`. Do not modify files outside this directory unless strictly required.`);
+    lines.push(``);
+  }
+
+  if (input.repoContext) {
+    lines.push(`## Relevant existing files`, "```", input.repoContext, "```", ``);
+  }
+
+  if (input.links && Object.keys(input.links).length > 0) {
+    lines.push(`## Feature metadata (links)`, "```json", JSON.stringify(input.links, null, 2), "```", ``);
+  }
+
+  if (remainingSteps.length > 0) {
+    lines.push(
+      `## Future steps (do NOT implement these now)`,
+      `These are planned for later agents — ignore them in this run:`,
+      ...remainingSteps.map((s, i) => `${i + 2}. ${s.title}${s.summary ? ` — ${s.summary.slice(0, 120)}` : ""}`),
+      ``
+    );
+  }
+
+  lines.push(
+    `## Reminder`,
+    `- **Commit. Push. Done.** Even a partial implementation committed is better than nothing committed.`,
+    `- Branch: \`${(input.links?.worktreeBranch as string | undefined) ?? "orch-feature-" + input.featureId}\``,
+    ``
+  );
+
   if (input.activityBaseUrl) {
     lines.push(
-      `Base URL for API (e.g. tunneled): ${input.activityBaseUrl}`,
-      "Example: curl -s -X POST -H 'content-type: application/json' -d '{\"kind\":\"agent\",\"message\":\"…\"}' \\",
-      `  "${input.activityBaseUrl}/api/v1/features/${input.featureId}/activity"`,
-      ""
-    );
-  } else {
-    lines.push(
-      "(No ORCHESTRATOR_ACTIVITY_BASE_URL was set on the server — localhost APIs are usually not reachable from Cursor Cloud; rely on git commits and the Cursor agent UI.)",
-      ""
+      `## Optional: report progress`,
+      `POST activity to: \`${input.activityBaseUrl}/api/v1/features/${input.featureId}/activity\``,
+      `Example: \`curl -s -X POST -H 'content-type: application/json' -d '{"kind":"agent","message":"…"}' "${input.activityBaseUrl}/api/v1/features/${input.featureId}/activity"\``,
+      ``
     );
   }
+
   return lines.join("\n");
 }
 
