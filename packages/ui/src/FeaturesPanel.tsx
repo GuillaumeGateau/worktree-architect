@@ -462,42 +462,6 @@ export function FeaturesPanel(props: {
               </div>
             )}
 
-            {detail.feature.status === "executing" && (activeStep || nowActivity.length > 0) && (
-              <section className="feature-now card" aria-label="Current focus">
-                <h3 className="subsection-title">Now</h3>
-                {activeStep ? (
-                  <div className="feature-now-step">
-                    <span className="badge step-badge-active">active</span>
-                    <span className="feature-now-step-title">{activeStep.title}</span>
-                    {activeStep.summary ? (
-                      <p className="muted-sm feature-now-step-summary">{activeStep.summary}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-                {nowActivity.length > 0 ? (
-                  <ul className="feature-now-activity">
-                    {nowActivity.map((a) => (
-                      <li key={a.id}>
-                        <span className="badge activity-kind">{a.kind}</span>
-                        <span className="mono muted-sm feature-now-time">
-                          {new Date(a.createdAt).toLocaleTimeString()}
-                        </span>
-                        <div className="feature-now-msg">{a.message}</div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : activityQ.isLoading ? (
-                  <p className="muted-sm">Loading activity…</p>
-                ) : (
-                  <p className="muted-sm">
-                    No activity events in the API response yet. If Start already finished, check{" "}
-                    <strong>Execution log</strong> below or confirm the orchestrator is using the same DB /
-                    cwd. While executing, activity is polled every 2.5s.
-                  </p>
-                )}
-              </section>
-            )}
-
             {(detail.feature.risks || detail.feature.dependencies) && (
               <div className="feature-risks card">
                 {detail.feature.risks ? (
@@ -539,53 +503,41 @@ export function FeaturesPanel(props: {
               )}
             </section>
 
-            <section className="execution-log-section card" aria-label="Execution log raw">
-              <h3 className="subsection-title">Execution log (raw)</h3>
-              <p className="muted-sm execution-log-hint">
-                Chronological trail from <code className="mono">GET …/activity</code> (up to 500 events).
-                {featureStatusForPoll === "executing"
-                  ? " Polling every 2.5s while this run is executing."
-                  : null}
-                {activityQ.isFetching ? (
-                  <span className="execution-log-fetching"> Refreshing…</span>
+            {detail.feature.status === "executing" && (activeStep || nowActivity.length > 0) && (
+              <section className="feature-now card" aria-label="Agent stage">
+                <h3 className="subsection-title">Agent stage</h3>
+                {activeStep ? (
+                  <div className="feature-now-step">
+                    <span className="badge step-badge-active">active</span>
+                    <span className="feature-now-step-title">{activeStep.title}</span>
+                    {activeStep.summary ? (
+                      <p className="muted-sm feature-now-step-summary">{activeStep.summary}</p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </p>
-              <div className="execution-log-links">
-                <div className="label">feature.links</div>
-                <pre className="execution-log-pre" tabIndex={0}>
-                  {JSON.stringify(detail.feature.links ?? {}, null, 2)}
-                </pre>
-              </div>
-              {activityQ.isLoading ? (
-                <p className="muted-sm">Loading activity…</p>
-              ) : activity.length === 0 ? (
-                <p className="muted-sm">
-                  No activity rows — if you just clicked Start, wait for the refetch or check the API
-                  process logs; empty here usually means nothing wrote to{" "}
-                  <code className="mono">activity_events</code> for this feature id.
-                </p>
-              ) : (
-                <ol className="execution-log-entries">
-                  {activity.map((a) => {
-                    const dj = formatDetailsJson(a.details);
-                    return (
-                      <li key={a.id} className="execution-log-entry">
-                        <div className="execution-log-line">
-                          <span className="mono execution-log-ts">{a.createdAt}</span>
-                          <span className="badge activity-kind">{a.kind}</span>
-                          <span className="mono execution-log-id">{a.id}</span>
-                          {a.stepId ? (
-                            <span className="mono muted-sm execution-log-step">step {a.stepId}</span>
-                          ) : null}
-                        </div>
-                        <div className="execution-log-message">{a.message}</div>
-                        {dj ? <pre className="execution-log-pre execution-log-details">{dj}</pre> : null}
+                {nowActivity.length > 0 ? (
+                  <ul className="feature-now-activity">
+                    {nowActivity.map((a) => (
+                      <li key={a.id}>
+                        <span className="badge activity-kind">{a.kind}</span>
+                        <span className="mono muted-sm feature-now-time">
+                          {new Date(a.createdAt).toLocaleTimeString()}
+                        </span>
+                        <div className="feature-now-msg">{a.message}</div>
                       </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </section>
+                    ))}
+                  </ul>
+                ) : activityQ.isLoading ? (
+                  <p className="muted-sm">Loading activity…</p>
+                ) : (
+                  <p className="muted-sm">
+                    No activity events in the API response yet. If Start already finished, check{" "}
+                    <strong>Execution log</strong> below or confirm the orchestrator is using the same DB /
+                    cwd. While executing, activity is polled every 2.5s.
+                  </p>
+                )}
+              </section>
+            )}
 
             <section className="feature-activity" aria-label="Activity">
               <div className="activity-head">
@@ -631,6 +583,54 @@ export function FeaturesPanel(props: {
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+
+            <section className="execution-log-section card" aria-label="Execution log raw">
+              <h3 className="subsection-title">Execution log (raw events)</h3>
+              <p className="muted-sm execution-log-hint">
+                Chronological trail from <code className="mono">GET …/activity</code> (up to 500 events).
+                {featureStatusForPoll === "executing"
+                  ? " Polling every 2.5s while this run is executing."
+                  : null}
+                {activityQ.isFetching ? (
+                  <span className="execution-log-fetching"> Refreshing…</span>
+                ) : null}
+              </p>
+              <div className="execution-log-links">
+                <div className="label">feature.links</div>
+                <pre className="execution-log-pre" tabIndex={0}>
+                  {JSON.stringify(detail.feature.links ?? {}, null, 2)}
+                </pre>
+              </div>
+              {activityQ.isLoading ? (
+                <p className="muted-sm">Loading activity…</p>
+              ) : activity.length === 0 ? (
+                <p className="muted-sm">
+                  No activity rows — if you just clicked Start, wait for the refetch or check the API
+                  process logs; empty here usually means nothing wrote to{" "}
+                  <code className="mono">activity_events</code> for this feature id.
+                </p>
+              ) : (
+                <ol className="execution-log-entries">
+                  {activity.map((a) => {
+                    const dj = formatDetailsJson(a.details);
+                    return (
+                      <li key={a.id} className="execution-log-entry">
+                        <div className="execution-log-line">
+                          <span className="mono execution-log-ts">{a.createdAt}</span>
+                          <span className="badge activity-kind">{a.kind}</span>
+                          <span className="mono execution-log-id">{a.id}</span>
+                          {a.stepId ? (
+                            <span className="mono muted-sm execution-log-step">step {a.stepId}</span>
+                          ) : null}
+                        </div>
+                        <div className="execution-log-message">{a.message}</div>
+                        {dj ? <pre className="execution-log-pre execution-log-details">{dj}</pre> : null}
+                      </li>
+                    );
+                  })}
+                </ol>
               )}
             </section>
           </>

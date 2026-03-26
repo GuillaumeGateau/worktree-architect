@@ -105,30 +105,34 @@ function isFinishedNote(message: string): boolean {
 }
 
 function shortenLabel(message: string): string {
-  const compact = message.replace(/\s+/g, " ").trim();
+  const compact = message
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+[—-]\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!compact) return "Working";
-  return compact.length > 56 ? `${compact.slice(0, 55)}…` : compact;
+  return compact.length > 40 ? `${compact.slice(0, 39)}…` : compact;
 }
 
 export function toHumanStatusLabel(kind: string, message: string): string {
   const launch = parseL2TaskLaunch(message);
-  if (launch) return `Starting task ${launch.taskOrdinal}`;
+  if (launch) return `Task ${launch.taskOrdinal} starting`;
 
   const taskStatus = parseL2TaskStatus(message);
-  if (taskStatus?.terminal === "completed") return "Done ✓";
+  if (taskStatus?.terminal === "completed") return "Done";
   if (taskStatus?.terminal === "failed") return "Failed";
 
   if (/All L2 tasks completed\. Launching merge auditor/i.test(message)) {
-    return "Starting merge audit";
+    return "Merge starting";
   }
-  if (/Merge auditor launched/i.test(message)) return "Merge audit running";
-  if (/Merge auditor completed/i.test(message)) return "Merge done ✓";
+  if (/Merge auditor launched/i.test(message)) return "Merge running";
+  if (/Merge auditor completed/i.test(message)) return "Merge done";
   if (/Merge auditor (FAILED|launch failed)/i.test(message)) return "Merge failed";
 
-  if (kind === "note" && isFinishedNote(message)) return "Done ✓";
-  if (kind === "agent") return "Walking to task";
+  if (kind === "note" && isFinishedNote(message)) return "Done";
+  if (kind === "agent") return "Walking";
   if (kind === "tool") return "Working";
-  if (kind === "merge") return "Merge audit running";
+  if (kind === "merge") return "Merge running";
   if (kind === "error") return "Error";
 
   return shortenLabel(message);
@@ -165,7 +169,7 @@ function getTaskFigure(
     stepOrdinal: step?.ordinal ?? taskOrdinal,
     stepId: step?.id,
     state: "idle",
-    statusLabel: "Waiting",
+    statusLabel: "Idle",
     updatedAt: new Date(0).toISOString(),
   };
   figures.set(figureId, created);
@@ -180,7 +184,7 @@ function getAuditorFigure(figures: Map<string, AgentStageFigure>): AgentStageFig
     figureId,
     role: "auditor",
     state: "idle",
-    statusLabel: "Waiting for merge",
+    statusLabel: "Merge idle",
     updatedAt: new Date(0).toISOString(),
   };
   figures.set(figureId, created);
@@ -232,8 +236,17 @@ export function deriveAgentStageState(
     }
   }
 
+  const orderedFigures = Array.from(figures.values()).sort((a, b) => {
+    // Keep task figures in ordinal order and keep merge auditor last.
+    if (a.role !== b.role) return a.role === "agent" ? -1 : 1;
+    const aOrd = a.stepOrdinal ?? a.taskOrdinal ?? Number.MAX_SAFE_INTEGER;
+    const bOrd = b.stepOrdinal ?? b.taskOrdinal ?? Number.MAX_SAFE_INTEGER;
+    if (aOrd !== bOrd) return aOrd - bOrd;
+    return a.figureId.localeCompare(b.figureId);
+  });
+
   return {
-    figures: Array.from(figures.values()),
+    figures: orderedFigures,
     agentIdToFigure,
   };
 }
