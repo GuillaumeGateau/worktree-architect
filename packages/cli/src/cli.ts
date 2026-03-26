@@ -19,6 +19,7 @@ import {
   writeInstance,
   clearInstance,
   orchestratorDir,
+  instancePath,
 } from "./instance-file.js";
 import { isAlive, terminateGracefully } from "./process-kill.js";
 import { pickListenPort } from "./port.js";
@@ -240,6 +241,105 @@ function headersFor(): Record<string, string> {
   const inst = readInstance(orchestratorRoot());
   const key = process.env.ORCHESTRATOR_API_KEY ?? inst?.apiKey;
   return key ? { "x-api-key": key } : {};
+}
+
+type DiagReport = {
+  timestamp: string;
+  cwd: string;
+  node: string;
+  platform: string;
+  config: {
+    path: string;
+    exists: boolean;
+  };
+  orchestratorDir: {
+    path: string;
+    exists: boolean;
+  };
+  instance: {
+    path: string;
+    exists: boolean;
+    parsed: boolean;
+    pid?: number;
+    pidAlive?: boolean;
+    baseUrl?: string;
+  };
+  environment: {
+    hasBaseUrlEnv: boolean;
+    hasApiKeyEnv: boolean;
+  };
+  health: {
+    checked: boolean;
+    baseUrl?: string;
+    ok?: boolean;
+    status?: number;
+    body?: unknown;
+    error?: string;
+  };
+};
+
+async function cmdDiag(opts: { baseUrl?: string }): Promise<void> {
+  const root = cwd();
+  const cfgPath = join(root, "orchestrator.config.yaml");
+  const orcDir = orchestratorDir(root);
+  const instPath = instancePath(root);
+  const inst = readInstance(root);
+  const baseUrl =
+    opts.baseUrl?.replace(/\/$/, "") ??
+    inst?.baseUrl?.replace(/\/$/, "") ??
+    process.env.ORCHESTRATOR_BASE_URL?.replace(/\/$/, "");
+  const report: DiagReport = {
+    timestamp: new Date().toISOString(),
+    cwd: root,
+    node: process.version,
+    platform: `${process.platform}-${process.arch}`,
+    config: {
+      path: cfgPath,
+      exists: existsSync(cfgPath),
+    },
+    orchestratorDir: {
+      path: orcDir,
+      exists: existsSync(orcDir),
+    },
+    instance: {
+      path: instPath,
+      exists: existsSync(instPath),
+      parsed: Boolean(inst),
+      pid: inst?.pid,
+      pidAlive: inst?.pid ? isAlive(inst.pid) : undefined,
+      baseUrl: inst?.baseUrl,
+    },
+    environment: {
+      hasBaseUrlEnv: Boolean(process.env.ORCHESTRATOR_BASE_URL),
+      hasApiKeyEnv: Boolean(process.env.ORCHESTRATOR_API_KEY),
+    },
+    health: {
+      checked: false,
+      baseUrl,
+    },
+  };
+
+  if (baseUrl) {
+    report.health.checked = true;
+    try {
+      const r = await fetch(new URL("/api/v1/health", baseUrl), {
+        headers: headersFor(),
+      });
+      report.health.status = r.status;
+      report.health.ok = r.ok;
+      const text = await r.text();
+      try {
+        report.health.body = JSON.parse(text);
+      } catch {
+        report.health.body = text;
+      }
+    } catch (err) {
+      report.health.ok = false;
+      report.health.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
 async function cmdEnqueue(
@@ -491,6 +591,14 @@ program
   .description("Check instance + API health")
   .action(async () => {
     await cmdDoctor();
+  });
+
+program
+  .command("diag")
+  .description("Print diagnostics for config, instance, env, and health")
+  .option("--base-url <url>", "Override health probe base URL")
+  .action(async (opts: { baseUrl?: string }) => {
+    await cmdDiag(opts);
   });
 
 program
