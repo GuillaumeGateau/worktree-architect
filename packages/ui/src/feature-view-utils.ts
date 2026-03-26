@@ -14,7 +14,7 @@ export function filterAndReverseActivity<T extends { kind: string }>(
 }
 
 export type AgentStageFigureState = "idle" | "walking" | "working" | "done";
-export type AgentStageFigureRole = "agent" | "auditor";
+export type AgentStageFigureRole = "agent" | "reviewer" | "tester" | "auditor";
 
 export type AgentStageFigure = {
   figureId: string;
@@ -44,6 +44,58 @@ type ActivityLike = {
 export type AgentStageDerivedState = {
   figures: AgentStageFigure[];
   agentIdToFigure: Record<string, string>;
+};
+
+const SHARED_OFFICE_VISIBLE_ROLES: AgentStageFigureRole[] = [
+  "agent",
+  "reviewer",
+  "tester",
+  "auditor",
+];
+
+/** Role checks for shared-office visibility. */
+export function isSharedOfficeVisibleRole(role: string): role is AgentStageFigureRole {
+  return SHARED_OFFICE_VISIBLE_ROLES.includes(role as AgentStageFigureRole);
+}
+
+export type ReviewerTesterVisibility = {
+  reviewerVisible: boolean;
+  testerVisible: boolean;
+};
+
+/**
+ * Validate reviewer and tester visibility from role membership.
+ * Used by smoke checks to ensure both lanes are represented.
+ */
+export function validateReviewerTesterVisibility(
+  roles: Iterable<string>
+): ReviewerTesterVisibility {
+  const seen = new Set<string>();
+  for (const role of roles) seen.add(role);
+  return {
+    reviewerVisible: seen.has("reviewer"),
+    testerVisible: seen.has("tester"),
+  };
+}
+
+export type DeskState = "empty" | "arriving" | "active" | "complete";
+
+export type DeskView = {
+  deskId: string;
+  figureId: string;
+  role: AgentStageFigureRole;
+  taskOrdinal?: number;
+  stepId?: string;
+  stepOrdinal?: number;
+  agentId?: string;
+  deskState: DeskState;
+  statusLabel: string;
+  updatedAt: string;
+};
+
+export type DeskDerivedState = {
+  desks: DeskView[];
+  agentIdToDesk: Record<string, string>;
 };
 
 const TASK_AGENT_LAUNCHED_RE =
@@ -236,4 +288,46 @@ export function deriveAgentStageState(
     figures: Array.from(figures.values()),
     agentIdToFigure,
   };
+}
+
+/**
+ * Map figure state to desk occupancy state used by the shared office view.
+ */
+export function mapFigureStateToDeskState(state: AgentStageFigureState): DeskState {
+  if (state === "walking") return "arriving";
+  if (state === "working") return "active";
+  if (state === "done") return "complete";
+  return "empty";
+}
+
+/**
+ * Build desk-level derived state from activity events and plan steps.
+ */
+export function deriveDeskState(activity: ActivityLike[], steps: StepLike[]): DeskDerivedState {
+  const stage = deriveAgentStageState(activity, steps);
+  const desks = stage.figures
+    .map<DeskView>((figure) => ({
+      deskId: `desk-${figure.figureId}`,
+      figureId: figure.figureId,
+      role: figure.role,
+      taskOrdinal: figure.taskOrdinal,
+      stepId: figure.stepId,
+      stepOrdinal: figure.stepOrdinal,
+      agentId: figure.agentId,
+      deskState: mapFigureStateToDeskState(figure.state),
+      statusLabel: figure.statusLabel,
+      updatedAt: figure.updatedAt,
+    }))
+    .sort((a, b) => {
+      if (a.role !== b.role) return a.role === "agent" ? -1 : 1;
+      return (a.taskOrdinal ?? Number.MAX_SAFE_INTEGER) - (b.taskOrdinal ?? Number.MAX_SAFE_INTEGER);
+    });
+
+  const agentIdToDesk: Record<string, string> = {};
+  for (const [agentId, figureId] of Object.entries(stage.agentIdToFigure)) {
+    const deskId = `desk-${figureId}`;
+    agentIdToDesk[agentId] = deskId;
+  }
+
+  return { desks, agentIdToDesk };
 }
