@@ -151,12 +151,14 @@ export function FeaturesPanel(props: {
   selectedId: string | null;
   onSelectId: (id: string | null) => void;
 }) {
+  const featureRunsRailId = "feature-runs-rail";
   const qc = useQueryClient();
   const { selectedId, onSelectId: setSelectedId } = props;
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activityKind, setActivityKind] = useState<string>("all");
   const [featureListView, setFeatureListView] = useState<FeatureListView>("active");
+  const [isRailCollapsed, setIsRailCollapsed] = useState(true);
 
   const featuresQ = useQuery({
     queryKey: ["features", featureListView],
@@ -200,6 +202,11 @@ export function FeaturesPanel(props: {
         featureListView === "archived" ? isFeatureArchived(feature) : !isFeatureArchived(feature)
       ),
     [featureListView, rawFeatures]
+  );
+
+  const selectedFeature = useMemo(
+    () => features.find((feature) => feature.id === selectedId),
+    [features, selectedId]
   );
 
   useEffect(() => {
@@ -414,66 +421,98 @@ export function FeaturesPanel(props: {
   })();
 
   return (
-    <div className="features-layout">
-      <div className="features-list-col">
-        <h2 className="section-title">Feature runs</h2>
-        <div className="feature-list-toolbar" role="tablist" aria-label="Feature run filters">
+    <div className={`features-layout ${isRailCollapsed ? "rail-collapsed" : ""}`}>
+      <div className={`features-list-col ${isRailCollapsed ? "collapsed" : ""}`}>
+        <div className="feature-list-col-head">
+          <h2 className="section-title">Feature runs</h2>
           <button
             type="button"
-            className={`feature-view-btn ${featureListView === "active" ? "active" : ""}`}
-            onClick={() => setFeatureListView("active")}
-            aria-selected={featureListView === "active"}
+            className="rail-toggle-btn"
+            aria-controls={featureRunsRailId}
+            aria-expanded={!isRailCollapsed}
+            onClick={() => setIsRailCollapsed((collapsed) => !collapsed)}
           >
-            Active
-          </button>
-          <button
-            type="button"
-            className={`feature-view-btn ${featureListView === "archived" ? "active" : ""}`}
-            onClick={() => setFeatureListView("archived")}
-            aria-selected={featureListView === "archived"}
-          >
-            Archived
+            {isRailCollapsed ? "Expand run list" : "Collapse run list"}
           </button>
         </div>
-        <p className="muted-sm">Desk map: {FooA(deskState)}</p>
-        {featuresQ.error && (
-          <div className="error-banner" role="alert">
-            Could not load features: {(featuresQ.error as Error).message}
-          </div>
-        )}
-        {features.length === 0 && !featuresQ.isLoading ? (
-          <div className="table-wrap empty">
-            {featureListView === "active" ? (
-              <>
-                No active feature runs yet. Use{" "}
-                <code className="mono">orchestrator feature create</code> or{" "}
-                <code className="mono">/build-feature</code> from Cursor.
-              </>
-            ) : (
-              <>No archived feature runs.</>
-            )}
+
+        {isRailCollapsed ? (
+          <div
+            id={featureRunsRailId}
+            className="feature-rail-collapsed-note"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="muted-sm">Feature list is collapsed by default.</p>
+            <p className="muted-sm">
+              {selectedFeature
+                ? `Selected: ${selectedFeature.title}`
+                : "Expand the run list to browse feature runs."}
+            </p>
           </div>
         ) : (
-          <ul className="feature-list" aria-label="Feature runs">
-            {features.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  className={`feature-list-item ${selectedId === f.id ? "active" : ""}`}
-                  onClick={() => setSelectedId(f.id)}
-                >
-                  <span className="feature-list-title">{f.title}</span>
-                  <span className="feature-list-badges">
-                    <span className={featureBadgeClass(f.status)}>{f.status}</span>
-                    {isFeatureArchived(f) ? <span className="badge feat-archived">archived</span> : null}
-                  </span>
-                  <span className="feature-list-id mono" title={f.id}>
-                    {f.id.slice(0, 10)}…
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div id={featureRunsRailId}>
+            <div className="feature-list-toolbar" role="tablist" aria-label="Feature run filters">
+              <button
+                type="button"
+                className={`feature-view-btn ${featureListView === "active" ? "active" : ""}`}
+                onClick={() => setFeatureListView("active")}
+                aria-selected={featureListView === "active"}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                className={`feature-view-btn ${featureListView === "archived" ? "active" : ""}`}
+                onClick={() => setFeatureListView("archived")}
+                aria-selected={featureListView === "archived"}
+              >
+                Archived
+              </button>
+            </div>
+            <p className="muted-sm">Desk map: {FooA(deskState)}</p>
+            {featuresQ.error && (
+              <div className="error-banner" role="alert">
+                Could not load features: {(featuresQ.error as Error).message}
+              </div>
+            )}
+            {features.length === 0 && !featuresQ.isLoading ? (
+              <div className="table-wrap empty">
+                {featureListView === "active" ? (
+                  <>
+                    No active feature runs yet. Use{" "}
+                    <code className="mono">orchestrator feature create</code> or{" "}
+                    <code className="mono">/build-feature</code> from Cursor.
+                  </>
+                ) : (
+                  <>No archived feature runs.</>
+                )}
+              </div>
+            ) : (
+              <ul className="feature-list" aria-label="Feature runs">
+                {features.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      className={`feature-list-item ${selectedId === f.id ? "active" : ""}`}
+                      onClick={() => setSelectedId(f.id)}
+                    >
+                      <span className="feature-list-title">{f.title}</span>
+                      <span className="feature-list-badges">
+                        <span className={featureBadgeClass(f.status)}>{f.status}</span>
+                        {isFeatureArchived(f) ? (
+                          <span className="badge feat-archived">archived</span>
+                        ) : null}
+                      </span>
+                      <span className="feature-list-id mono" title={f.id}>
+                        {f.id.slice(0, 10)}…
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
 
