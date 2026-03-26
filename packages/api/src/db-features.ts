@@ -437,3 +437,54 @@ export function upsertFeatureTask(
     .get(task.id) as Record<string, unknown>;
   return rowToFeatureTask(row);
 }
+
+function taskStatusToStepStatus(taskStatus: string): StepStatus | undefined {
+  const s = taskStatus.trim().toLowerCase();
+  if (s === "done" || s === "completed" || s === "succeeded") return "done";
+  if (s === "failed" || s === "error" || s === "expired") return "failed";
+  if (s === "blocked") return "blocked";
+  if (s === "active" || s === "running" || s === "claimed") return "active";
+  if (s === "skipped") return "skipped";
+  // Intentionally do not force pending from task status so Start's optimistic
+  // active step can remain visible until a task becomes active/terminal.
+  return undefined;
+}
+
+/**
+ * Keep feature_steps aligned with feature_tasks truth for task-engine mode.
+ * Mapping is ordinal-based because seeded tasks preserve step ordinals.
+ */
+export function syncStepStatusFromTaskTruth(
+  db: Database.Database,
+  featureId: string
+): FeatureStep[] {
+  const steps = listSteps(db, featureId);
+  if (steps.length === 0) return steps;
+  const tasks = getFeatureTasks(db, featureId);
+  if (tasks.length === 0) return steps;
+
+  const taskStatusByOrdinal = new Map<number, StepStatus>();
+  for (const task of tasks) {
+    const mapped = taskStatusToStepStatus(task.status);
+    if (mapped) taskStatusByOrdinal.set(task.ordinal, mapped);
+  }
+  if (taskStatusByOrdinal.size === 0) return steps;
+
+  const now = new Date().toISOString();
+  const update = db.prepare(
+    `UPDATE feature_steps SET status = ?, updated_at = ? WHERE id = ?`
+  );
+  let changed = false;
+
+  for (const step of steps) {
+    const nextStatus = taskStatusByOrdinal.get(step.ordinal);
+    if (!nextStatus || nextStatus === step.status) continue;
+    update.run(nextStatus, now, step.id);
+    changed = true;
+  }
+
+  if (changed) {
+    db.prepare(`UPDATE feature_runs SET updated_at = ? WHERE id = ?`).run(now, featureId);
+  }
+  return listSteps(db, featureId);
+}
