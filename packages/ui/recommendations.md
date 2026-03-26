@@ -18,6 +18,28 @@ Executed checks:
 
 Smoke feature id used for validation: `JPZBq7k7kSoN`
 
+## Integration evidence: completion trust signals
+
+Evidence artifact: `packages/ui/src/feature-view-utils.test.ts`
+
+Added test:
+
+- `captures completion trust signals from source-of-truth activity and step statuses`
+
+Evidence assertions in that test:
+
+- Step source-of-truth statuses indicate no active tasks (`activeTaskCount = 0`)
+- Activity-derived stage indicates no running cloud agents (`runningCloudAgentCount = 0`)
+- Counter reconciliation holds (`activeTaskCount === runningCloudAgentCount`)
+- Role trust signals for a completed run resolve to terminal waiting/completed messaging:
+  - Orchestrator: `Execution complete; waiting on reviewer/tester`
+  - Reviewer: `Review complete`
+  - Tester: `Testing complete`
+
+Verification command for this evidence:
+
+- `npm test -w @orch-os/ui`
+
 ## Observed behavior
 
 ### 1) Core feature status transition works
