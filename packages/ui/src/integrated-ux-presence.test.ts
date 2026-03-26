@@ -19,13 +19,16 @@ describe("integrated shared-office UX presence", () => {
       /\(detail\.feature\.status === "executing" \|\| deskFigures\.length > 0\)/
     );
     expect(featuresPanelSource).toMatch(
-      /\(detail\.feature\.status === "executing" \|\| officeFigures\.length > 0\)/
+      /\(detail\.feature\.status === "executing" \|\| officeScene\.placements\.length > 0\)/
     );
   });
 
   it("derives figure motion state from activity and steps", () => {
-    expect(featuresPanelSource).toContain("deriveAgentStageState(activity, sortedSteps).figures");
-    expect(featuresPanelSource).toContain("motionZoneForFigure(figure)");
-    expect(featuresPanelSource).toContain("Agents leave their desk as work starts and return when complete.");
+    expect(featuresPanelSource).toContain(
+      "const stageState = useMemo(() => deriveAgentStageState(activity, sortedSteps), [activity, sortedSteps]);"
+    );
+    expect(featuresPanelSource).toContain("const deskFigures = stageState.figures;");
+    expect(featuresPanelSource).toContain("const officeScene = useMemo(() => {");
+    expect(featuresPanelSource).toContain("deriveOfficeSceneState(stageState.figures, {");
   });
 });
