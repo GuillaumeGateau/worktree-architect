@@ -19,7 +19,6 @@ import {
   sortStepsByOrdinal,
 } from "./feature-view-utils";
 import type { AgentStageFigure, AgentStageMotionZone } from "./feature-view-utils";
-import { FooA } from "./FooA";
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
