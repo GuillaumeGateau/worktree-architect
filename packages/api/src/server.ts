@@ -38,6 +38,7 @@ import {
   listActivity,
   getFeatureTasks,
   upsertFeatureTask,
+  syncStepStatusFromTaskTruth,
   type FeatureTaskRecord,
 } from "./db-features.js";
 import {
@@ -895,6 +896,7 @@ export async function buildServer(opts: ServerOptions) {
         integrationRecordedAt: body.integrationRecordedAt ?? task.integrationRecordedAt,
         updatedAt: new Date().toISOString(),
       });
+      syncStepStatusFromTaskTruth(db, featureId);
       emitOrchestratorEvent({ type: "feature_updated", featureId });
       return updated;
     }
