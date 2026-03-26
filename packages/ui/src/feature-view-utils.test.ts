@@ -485,6 +485,83 @@ describe("feature-view-utils", () => {
     expect(countRunningCloudAgents(derived.figures)).toBe(1);
   });
 
+  it("keeps live execution counters aligned with task-engine truth", () => {
+    const steps = [
+      {
+        id: "step-0",
+        ordinal: 0,
+        title: "Capture integration evidence",
+        status: "active",
+      },
+      {
+        id: "step-1",
+        ordinal: 1,
+        title: "Verify dashboard status sync",
+        status: "pending",
+      },
+      {
+        id: "step-2",
+        ordinal: 2,
+        title: "Confirm merge outcome visibility",
+        status: "pending",
+      },
+    ];
+    const activity = [
+      {
+        id: "a1",
+        kind: "plan",
+        message:
+          "Provisioning execution environment (git worktree when enabled, optional Cursor Cloud Agent, local start hook)…",
+        createdAt: "2026-03-26T01:36:24.000Z",
+      },
+      {
+        id: "a2",
+        kind: "tool",
+        message:
+          "Created git worktree at /workspace/.orchestrator/feature-worktrees/p1X-4KFE7qpy (branch orch-feature-p1X-4KFE7qpy).",
+        createdAt: "2026-03-26T01:36:25.000Z",
+      },
+      {
+        id: "a3",
+        kind: "plan",
+        message:
+          'Dispatching 1 parallel L2 agent(s): "Capture integration evidence"',
+        createdAt: "2026-03-26T01:36:27.000Z",
+      },
+      {
+        id: "a4",
+        kind: "agent",
+        message:
+          'L2 agent launched for task [0] "Capture integration evidence" — https://cursor.com/agents/bc-555be8b5-cc4a-45b0-ae1a-1990f64e7e33 (branch: orch-feature-task-p1X-4KFE-Nz9VwOpILL, ref: main)',
+        createdAt: "2026-03-26T01:36:28.000Z",
+      },
+    ];
+
+    const derived = deriveAgentStageState(activity, steps);
+    const runningCloudAgentCount = countRunningCloudAgents(derived.figures);
+    const activeTaskCount = steps.filter((s) => s.status === "active").length;
+    expect(activeTaskCount).toBe(1);
+    expect(runningCloudAgentCount).toBe(1);
+    expect(derived.figures.find((f) => f.figureId === "task-0")).toMatchObject({
+      figureId: "task-0",
+      state: "working",
+      statusLabel: "Working",
+      agentId: "bc-555be8b5-cc4a-45b0-ae1a-1990f64e7e33",
+      stepId: "step-0",
+      stepOrdinal: 0,
+    });
+
+    const roleLines = deriveSceneRoleStatusLines("executing", steps, activity);
+    expect(roleLines[0]).toEqual({
+      role: "orchestrator",
+      label: "Orchestrator",
+      state: "active",
+      detail: "Executing step 0: Capture integration evidence",
+    });
+    expect(roleLines[1].state).toBe("waiting");
+    expect(roleLines[2].state).toBe("waiting");
+  });
+
   it("maps figure states to desk states", () => {
     expect(mapFigureStateToDeskState("idle")).toBe("empty");
     expect(mapFigureStateToDeskState("walking")).toBe("arriving");
