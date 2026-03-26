@@ -44,6 +44,31 @@ export type FeatureStepRow = {
   updatedAt: string;
 };
 
+export type IntegrationResult =
+  | "pending"
+  | "cloud_completed"
+  | "integrated_completed"
+  | "integration_failed"
+  | "not_applicable";
+
+export type FeatureTaskRow = {
+  id: string;
+  featureId: string;
+  ordinal: number;
+  title: string;
+  summary?: string;
+  dependsOn: string;
+  status: string;
+  agentId?: string;
+  branch?: string;
+  integrationResult: IntegrationResult;
+  integrationReason?: string;
+  integrationDetail?: string;
+  integrationRecordedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ActivityEventRow = {
   id: string;
   featureId: string;

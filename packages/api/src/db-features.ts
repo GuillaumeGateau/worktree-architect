@@ -66,11 +66,23 @@ export type FeatureTaskRecord = {
   status: string;
   agentId?: string;
   branch?: string;
+  integrationResult: "pending" | "cloud_completed" | "integrated_completed" | "integration_failed" | "not_applicable";
+  integrationReason?: string;
+  integrationDetail?: string;
+  integrationRecordedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
+  const integrationResultRaw = row.integration_result ? String(row.integration_result) : "pending";
+  const integrationResult: FeatureTaskRecord["integrationResult"] =
+    integrationResultRaw === "cloud_completed" ||
+    integrationResultRaw === "integrated_completed" ||
+    integrationResultRaw === "integration_failed" ||
+    integrationResultRaw === "not_applicable"
+      ? integrationResultRaw
+      : "pending";
   return {
     id: String(row.id),
     featureId: String(row.feature_id),
@@ -81,6 +93,10 @@ function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
     status: String(row.status),
     agentId: row.agent_id ? String(row.agent_id) : undefined,
     branch: row.branch ? String(row.branch) : undefined,
+    integrationResult,
+    integrationReason: row.integration_reason ? String(row.integration_reason) : undefined,
+    integrationDetail: row.integration_detail ? String(row.integration_detail) : undefined,
+    integrationRecordedAt: row.integration_recorded_at ? String(row.integration_recorded_at) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -389,7 +405,9 @@ export function getFeatureTasks(
 ): FeatureTaskRecord[] {
   const rows = db
     .prepare(
-      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+              integration_result, integration_reason, integration_detail, integration_recorded_at,
+              created_at, updated_at
        FROM feature_tasks WHERE feature_id = ? ORDER BY ordinal ASC`
     )
     .all(featureId) as Record<string, unknown>[];
@@ -404,8 +422,12 @@ export function upsertFeatureTask(
   const createdAt = task.createdAt ?? now;
   const updatedAt = task.updatedAt ?? now;
   db.prepare(
-    `INSERT INTO feature_tasks (id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO feature_tasks (
+       id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+       integration_result, integration_reason, integration_detail, integration_recorded_at,
+       created_at, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        feature_id = excluded.feature_id,
        ordinal = excluded.ordinal,
@@ -415,6 +437,10 @@ export function upsertFeatureTask(
        status = excluded.status,
        agent_id = excluded.agent_id,
        branch = excluded.branch,
+       integration_result = excluded.integration_result,
+       integration_reason = excluded.integration_reason,
+       integration_detail = excluded.integration_detail,
+       integration_recorded_at = excluded.integration_recorded_at,
        updated_at = excluded.updated_at`
   ).run(
     task.id,
@@ -426,12 +452,18 @@ export function upsertFeatureTask(
     task.status ?? "pending",
     task.agentId ?? null,
     task.branch ?? null,
+    task.integrationResult ?? "pending",
+    task.integrationReason ?? null,
+    task.integrationDetail ?? null,
+    task.integrationRecordedAt ?? null,
     createdAt,
     updatedAt
   );
   const row = db
     .prepare(
-      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+              integration_result, integration_reason, integration_detail, integration_recorded_at,
+              created_at, updated_at
        FROM feature_tasks WHERE id = ?`
     )
     .get(task.id) as Record<string, unknown>;
