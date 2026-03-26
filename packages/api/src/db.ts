@@ -37,7 +37,6 @@ export function openDb(sqlitePath: string): Database.Database {
       risks TEXT,
       dependencies TEXT,
       links_json TEXT,
-      archived_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

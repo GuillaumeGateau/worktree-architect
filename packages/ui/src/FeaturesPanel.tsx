@@ -240,10 +240,8 @@ export function FeaturesPanel(props: {
 
   const deskState = useMemo(() => deriveDeskState(activity, sortedSteps), [activity, sortedSteps]);
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
-  const deskFigures = useMemo(
-    () => deriveAgentStageState(activity, sortedSteps).figures,
-    [activity, sortedSteps]
-  );
+  const stageState = useMemo(() => deriveAgentStageState(activity, sortedSteps), [activity, sortedSteps]);
+  const deskFigures = stageState.figures;
   const figureById = useMemo(
     () => new Map(deskFigures.map((figure) => [figure.figureId, figure] as const)),
     [deskFigures]
@@ -251,11 +249,11 @@ export function FeaturesPanel(props: {
   const officeScene = useMemo(() => {
     const deskCount = Math.max(sortedSteps.length, deskFigures.length, 1);
     const deskColumns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(deskCount))));
-    return deriveOfficeSceneState(deskFigures, {
+    return deriveOfficeSceneState(stageState.figures, {
       deskCount,
       deskColumns,
     });
-  }, [deskFigures, sortedSteps.length]);
+  }, [stageState.figures, sortedSteps.length]);
   const officeZoneById = useMemo(() => {
     const map = new Map<string, (typeof officeScene.layout.desks)[number] | typeof officeScene.layout.zones.hub>();
     for (const desk of officeScene.layout.desks) map.set(desk.id, desk);
@@ -827,7 +825,7 @@ export function FeaturesPanel(props: {
               <DeskAgentAvatars figures={deskFigures} />
             )}
 
-            {(detail.feature.status === "executing" || officeFigures.length > 0) && (
+            {(detail.feature.status === "executing" || officeScene.placements.length > 0) && (
               <section className="office-stage card" aria-label="Shared office movement">
                 <div className="office-stage-head">
                   <h3 className="subsection-title">Shared office</h3>
