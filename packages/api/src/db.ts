@@ -61,6 +61,10 @@ export function openDb(sqlitePath: string): Database.Database {
       status TEXT NOT NULL DEFAULT "pending",
       agent_id TEXT,
       branch TEXT,
+      integration_result TEXT NOT NULL DEFAULT "pending",
+      integration_reason TEXT,
+      integration_detail TEXT,
+      integration_recorded_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -75,6 +79,32 @@ export function openDb(sqlitePath: string): Database.Database {
       FOREIGN KEY (feature_id) REFERENCES feature_runs(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_activity_feature ON activity_events(feature_id);
+  `);
+  const featureTaskColumns = db
+    .prepare(`PRAGMA table_info(feature_tasks)`)
+    .all() as Array<{ name: string }>;
+  const hasFeatureTaskColumn = (columnName: string): boolean =>
+    featureTaskColumns.some((column) => String(column.name) === columnName);
+  if (!hasFeatureTaskColumn("integration_result")) {
+    db.exec(`ALTER TABLE feature_tasks ADD COLUMN integration_result TEXT NOT NULL DEFAULT "pending"`);
+  }
+  if (!hasFeatureTaskColumn("integration_reason")) {
+    db.exec(`ALTER TABLE feature_tasks ADD COLUMN integration_reason TEXT`);
+  }
+  if (!hasFeatureTaskColumn("integration_detail")) {
+    db.exec(`ALTER TABLE feature_tasks ADD COLUMN integration_detail TEXT`);
+  }
+  if (!hasFeatureTaskColumn("integration_recorded_at")) {
+    db.exec(`ALTER TABLE feature_tasks ADD COLUMN integration_recorded_at TEXT`);
+  }
+  db.exec(`
+    UPDATE feature_tasks
+    SET integration_result = CASE
+      WHEN status = 'done' THEN 'cloud_completed'
+      WHEN status = 'failed' THEN 'not_applicable'
+      ELSE 'pending'
+    END
+    WHERE integration_result IS NULL
   `);
   return db;
 }

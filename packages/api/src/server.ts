@@ -38,6 +38,7 @@ import {
   listActivity,
   getFeatureTasks,
   upsertFeatureTask,
+  syncStepStatusFromTaskTruth,
   type FeatureTaskRecord,
 } from "./db-features.js";
 import {
@@ -217,6 +218,146 @@ function activityToJSON(a: ActivityEvent) {
   };
 }
 
+type TaskIntegrationState =
+  | "not_completed"
+  | "merged"
+  | "merge_skipped"
+  | "pending_merge_outcome";
+
+type FeatureTaskWithIntegration = FeatureTaskRecord & {
+  integrationState: TaskIntegrationState;
+};
+
+type FeatureMergeOutcomes = {
+  taskCounts: {
+    total: number;
+    pending: number;
+    active: number;
+    done: number;
+    failed: number;
+    blocked: number;
+    other: number;
+    terminal: number;
+  };
+  mergeCounts: {
+    merged: number;
+    skipped: number;
+    pending: number;
+  };
+  mismatch: {
+    hasMismatch: boolean;
+    completedTasks: number;
+    integratedTasks: number;
+    completedWithoutIntegration: number;
+    integratedWithoutCompletion: number;
+  };
+};
+
+const MERGED_TASK_RE = /Merged task \[(\d+)\] into integration branch/i;
+const MERGE_SKIPPED_TASK_RE = /Integration merge skipped for task \[(\d+)\]/i;
+
+function parseTaskOrdinal(message: string, re: RegExp): number | undefined {
+  const m = message.match(re);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+function deriveTaskIntegration(
+  tasks: FeatureTaskRecord[],
+  activity: ActivityEvent[]
+): {
+  tasks: FeatureTaskWithIntegration[];
+  mergeOutcomes: FeatureMergeOutcomes;
+} {
+  const mergedOrdinals = new Set<number>();
+  const skippedOrdinals = new Set<number>();
+
+  for (const ev of activity) {
+    const mergedOrdinal = parseTaskOrdinal(ev.message, MERGED_TASK_RE);
+    if (mergedOrdinal !== undefined) mergedOrdinals.add(mergedOrdinal);
+    const skippedOrdinal = parseTaskOrdinal(ev.message, MERGE_SKIPPED_TASK_RE);
+    if (skippedOrdinal !== undefined) skippedOrdinals.add(skippedOrdinal);
+  }
+
+  const taskCounts: FeatureMergeOutcomes["taskCounts"] = {
+    total: tasks.length,
+    pending: 0,
+    active: 0,
+    done: 0,
+    failed: 0,
+    blocked: 0,
+    other: 0,
+    terminal: 0,
+  };
+
+  const tasksWithIntegration: FeatureTaskWithIntegration[] = tasks.map((task) => {
+    const status = task.status.toLowerCase();
+    if (status === "pending") taskCounts.pending += 1;
+    else if (status === "active" || status === "running" || status === "claimed") {
+      taskCounts.active += 1;
+    } else if (status === "done") taskCounts.done += 1;
+    else if (status === "failed") taskCounts.failed += 1;
+    else if (status === "blocked") taskCounts.blocked += 1;
+    else taskCounts.other += 1;
+
+    if (["done", "failed", "blocked"].includes(status)) taskCounts.terminal += 1;
+
+    let integrationState: TaskIntegrationState = "not_completed";
+    if (status === "done") {
+      if (mergedOrdinals.has(task.ordinal)) integrationState = "merged";
+      else if (skippedOrdinals.has(task.ordinal)) integrationState = "merge_skipped";
+      else integrationState = "pending_merge_outcome";
+    }
+
+    return { ...task, integrationState };
+  });
+
+  let mergedDone = 0;
+  let skippedDone = 0;
+  let pendingDone = 0;
+  for (const task of tasksWithIntegration) {
+    if (task.status.toLowerCase() !== "done") continue;
+    if (task.integrationState === "merged") mergedDone += 1;
+    else if (task.integrationState === "merge_skipped") skippedDone += 1;
+    else if (task.integrationState === "pending_merge_outcome") pendingDone += 1;
+  }
+
+  const doneOrdinals = new Set(
+    tasksWithIntegration
+      .filter((t) => t.status.toLowerCase() === "done")
+      .map((t) => t.ordinal)
+  );
+  let integratedWithoutCompletion = 0;
+  for (const ord of mergedOrdinals) {
+    if (!doneOrdinals.has(ord)) integratedWithoutCompletion += 1;
+  }
+
+  const completedTasks = taskCounts.done;
+  const integratedTasks = mergedDone;
+  const completedWithoutIntegration = Math.max(completedTasks - integratedTasks, 0);
+
+  return {
+    tasks: tasksWithIntegration,
+    mergeOutcomes: {
+      taskCounts,
+      mergeCounts: {
+        merged: mergedDone,
+        skipped: skippedDone,
+        pending: pendingDone,
+      },
+      mismatch: {
+        hasMismatch:
+          completedWithoutIntegration > 0 || integratedWithoutCompletion > 0,
+        completedTasks,
+        integratedTasks,
+        completedWithoutIntegration,
+        integratedWithoutCompletion,
+      },
+    },
+  };
+}
+
 function resolveUiDist(): string {
   try {
     const pkg = dirname(require.resolve("@orch-os/ui/package.json"));
@@ -375,9 +516,13 @@ export async function buildServer(opts: ServerOptions) {
       reply.code(404).send({ error: "not_found" });
       return;
     }
+    const tasks = getFeatureTasks(db, run.id);
+    const integration = deriveTaskIntegration(tasks, listActivity(db, run.id, { limit: 500 }));
     return {
       feature: featureToJSON(run),
       steps: listSteps(db, run.id).map(stepToJSON),
+      tasks: integration.tasks,
+      mergeOutcomes: integration.mergeOutcomes,
     };
   });
 
@@ -833,7 +978,12 @@ export async function buildServer(opts: ServerOptions) {
         reply.code(404).send({ error: "not_found" });
         return;
       }
-      return { tasks: getFeatureTasks(db, req.params.id) };
+      const tasks = getFeatureTasks(db, req.params.id);
+      const integration = deriveTaskIntegration(tasks, listActivity(db, req.params.id, { limit: 500 }));
+      return {
+        tasks: integration.tasks,
+        mergeOutcomes: integration.mergeOutcomes,
+      };
     }
   );
 
@@ -854,6 +1004,10 @@ export async function buildServer(opts: ServerOptions) {
           summary: t.summary,
           dependsOn: JSON.stringify(t.dependsOn ?? []),
           status: "pending",
+          integrationResult: "pending",
+          integrationReason: "task_seeded",
+          integrationDetail: "Task created and waiting for cloud completion.",
+          integrationRecordedAt: now,
           createdAt: now,
           updatedAt: now,
         };
@@ -871,14 +1025,27 @@ export async function buildServer(opts: ServerOptions) {
       const tasks = getFeatureTasks(db, featureId);
       const task = tasks.find((t) => t.id === taskId);
       if (!task) { reply.code(404).send({ error: "not_found" }); return; }
-      const body = req.body as { status?: string; agentId?: string; branch?: string };
+      const body = req.body as {
+        status?: string;
+        agentId?: string;
+        branch?: string;
+        integrationResult?: FeatureTaskRecord["integrationResult"];
+        integrationReason?: string;
+        integrationDetail?: string;
+        integrationRecordedAt?: string;
+      };
       const updated = upsertFeatureTask(db, {
         ...task,
         status: body.status ?? task.status,
         agentId: body.agentId ?? task.agentId,
         branch: body.branch ?? task.branch,
+        integrationResult: body.integrationResult ?? task.integrationResult,
+        integrationReason: body.integrationReason ?? task.integrationReason,
+        integrationDetail: body.integrationDetail ?? task.integrationDetail,
+        integrationRecordedAt: body.integrationRecordedAt ?? task.integrationRecordedAt,
         updatedAt: new Date().toISOString(),
       });
+      syncStepStatusFromTaskTruth(db, featureId);
       emitOrchestratorEvent({ type: "feature_updated", featureId });
       return updated;
     }

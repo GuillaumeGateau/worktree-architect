@@ -66,11 +66,23 @@ export type FeatureTaskRecord = {
   status: string;
   agentId?: string;
   branch?: string;
+  integrationResult: "pending" | "cloud_completed" | "integrated_completed" | "integration_failed" | "not_applicable";
+  integrationReason?: string;
+  integrationDetail?: string;
+  integrationRecordedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
+  const integrationResultRaw = row.integration_result ? String(row.integration_result) : "pending";
+  const integrationResult: FeatureTaskRecord["integrationResult"] =
+    integrationResultRaw === "cloud_completed" ||
+    integrationResultRaw === "integrated_completed" ||
+    integrationResultRaw === "integration_failed" ||
+    integrationResultRaw === "not_applicable"
+      ? integrationResultRaw
+      : "pending";
   return {
     id: String(row.id),
     featureId: String(row.feature_id),
@@ -81,6 +93,10 @@ function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
     status: String(row.status),
     agentId: row.agent_id ? String(row.agent_id) : undefined,
     branch: row.branch ? String(row.branch) : undefined,
+    integrationResult,
+    integrationReason: row.integration_reason ? String(row.integration_reason) : undefined,
+    integrationDetail: row.integration_detail ? String(row.integration_detail) : undefined,
+    integrationRecordedAt: row.integration_recorded_at ? String(row.integration_recorded_at) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -389,7 +405,9 @@ export function getFeatureTasks(
 ): FeatureTaskRecord[] {
   const rows = db
     .prepare(
-      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+              integration_result, integration_reason, integration_detail, integration_recorded_at,
+              created_at, updated_at
        FROM feature_tasks WHERE feature_id = ? ORDER BY ordinal ASC`
     )
     .all(featureId) as Record<string, unknown>[];
@@ -404,8 +422,12 @@ export function upsertFeatureTask(
   const createdAt = task.createdAt ?? now;
   const updatedAt = task.updatedAt ?? now;
   db.prepare(
-    `INSERT INTO feature_tasks (id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO feature_tasks (
+       id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+       integration_result, integration_reason, integration_detail, integration_recorded_at,
+       created_at, updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        feature_id = excluded.feature_id,
        ordinal = excluded.ordinal,
@@ -415,6 +437,10 @@ export function upsertFeatureTask(
        status = excluded.status,
        agent_id = excluded.agent_id,
        branch = excluded.branch,
+       integration_result = excluded.integration_result,
+       integration_reason = excluded.integration_reason,
+       integration_detail = excluded.integration_detail,
+       integration_recorded_at = excluded.integration_recorded_at,
        updated_at = excluded.updated_at`
   ).run(
     task.id,
@@ -426,14 +452,71 @@ export function upsertFeatureTask(
     task.status ?? "pending",
     task.agentId ?? null,
     task.branch ?? null,
+    task.integrationResult ?? "pending",
+    task.integrationReason ?? null,
+    task.integrationDetail ?? null,
+    task.integrationRecordedAt ?? null,
     createdAt,
     updatedAt
   );
   const row = db
     .prepare(
-      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch, created_at, updated_at
+      `SELECT id, feature_id, ordinal, title, summary, depends_on, status, agent_id, branch,
+              integration_result, integration_reason, integration_detail, integration_recorded_at,
+              created_at, updated_at
        FROM feature_tasks WHERE id = ?`
     )
     .get(task.id) as Record<string, unknown>;
   return rowToFeatureTask(row);
+}
+
+function taskStatusToStepStatus(taskStatus: string): StepStatus | undefined {
+  const s = taskStatus.trim().toLowerCase();
+  if (s === "done" || s === "completed" || s === "succeeded") return "done";
+  if (s === "failed" || s === "error" || s === "expired") return "failed";
+  if (s === "blocked") return "blocked";
+  if (s === "active" || s === "running" || s === "claimed") return "active";
+  if (s === "skipped") return "skipped";
+  // Intentionally do not force pending from task status so Start's optimistic
+  // active step can remain visible until a task becomes active/terminal.
+  return undefined;
+}
+
+/**
+ * Keep feature_steps aligned with feature_tasks truth for task-engine mode.
+ * Mapping is ordinal-based because seeded tasks preserve step ordinals.
+ */
+export function syncStepStatusFromTaskTruth(
+  db: Database.Database,
+  featureId: string
+): FeatureStep[] {
+  const steps = listSteps(db, featureId);
+  if (steps.length === 0) return steps;
+  const tasks = getFeatureTasks(db, featureId);
+  if (tasks.length === 0) return steps;
+
+  const taskStatusByOrdinal = new Map<number, StepStatus>();
+  for (const task of tasks) {
+    const mapped = taskStatusToStepStatus(task.status);
+    if (mapped) taskStatusByOrdinal.set(task.ordinal, mapped);
+  }
+  if (taskStatusByOrdinal.size === 0) return steps;
+
+  const now = new Date().toISOString();
+  const update = db.prepare(
+    `UPDATE feature_steps SET status = ?, updated_at = ? WHERE id = ?`
+  );
+  let changed = false;
+
+  for (const step of steps) {
+    const nextStatus = taskStatusByOrdinal.get(step.ordinal);
+    if (!nextStatus || nextStatus === step.status) continue;
+    update.run(nextStatus, now, step.id);
+    changed = true;
+  }
+
+  if (changed) {
+    db.prepare(`UPDATE feature_runs SET updated_at = ? WHERE id = ?`).run(now, featureId);
+  }
+  return listSteps(db, featureId);
 }

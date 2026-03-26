@@ -44,6 +44,31 @@ export type FeatureStepRow = {
   updatedAt: string;
 };
 
+export type IntegrationResult =
+  | "pending"
+  | "cloud_completed"
+  | "integrated_completed"
+  | "integration_failed"
+  | "not_applicable";
+
+export type FeatureTaskRow = {
+  id: string;
+  featureId: string;
+  ordinal: number;
+  title: string;
+  summary?: string;
+  dependsOn: string;
+  status: string;
+  agentId?: string;
+  branch?: string;
+  integrationResult: IntegrationResult;
+  integrationReason?: string;
+  integrationDetail?: string;
+  integrationRecordedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ActivityEventRow = {
   id: string;
   featureId: string;
@@ -57,4 +82,52 @@ export type ActivityEventRow = {
 export type FeatureDetailPayload = {
   feature: FeatureRow;
   steps: FeatureStepRow[];
+  tasks?: FeatureTaskRow[];
+  mergeOutcomes?: FeatureMergeOutcomes;
+};
+
+export type TaskIntegrationState =
+  | "not_completed"
+  | "merged"
+  | "merge_skipped"
+  | "pending_merge_outcome";
+
+export type FeatureTaskRow = {
+  id: string;
+  featureId: string;
+  ordinal: number;
+  title: string;
+  summary?: string;
+  dependsOn: string;
+  status: string;
+  agentId?: string;
+  branch?: string;
+  createdAt: string;
+  updatedAt: string;
+  integrationState?: TaskIntegrationState;
+};
+
+export type FeatureMergeOutcomes = {
+  taskCounts: {
+    total: number;
+    pending: number;
+    active: number;
+    done: number;
+    failed: number;
+    blocked: number;
+    other: number;
+    terminal: number;
+  };
+  mergeCounts: {
+    merged: number;
+    skipped: number;
+    pending: number;
+  };
+  mismatch: {
+    hasMismatch: boolean;
+    completedTasks: number;
+    integratedTasks: number;
+    completedWithoutIntegration: number;
+    integratedWithoutCompletion: number;
+  };
 };
