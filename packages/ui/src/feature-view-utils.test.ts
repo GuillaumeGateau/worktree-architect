@@ -41,10 +41,10 @@ describe("feature-view-utils", () => {
         "agent",
         'L2 agent launched for task [0] "Derive figure state" — https://cursor.com/agents/agt_123456 (branch: orch-task)'
       )
-    ).toBe("Starting task 0");
-    expect(toHumanStatusLabel("tool", 'L2 task [1] "Wire stage" completed.')).toBe("Done ✓");
+    ).toBe("Task 0 starting");
+    expect(toHumanStatusLabel("tool", 'L2 task [1] "Wire stage" completed.')).toBe("Done");
     expect(toHumanStatusLabel("plan", "All L2 tasks completed. Launching merge auditor…")).toBe(
-      "Starting merge audit"
+      "Merge starting"
     );
   });
 
@@ -100,7 +100,7 @@ describe("feature-view-utils", () => {
       figureId: "task-0",
       role: "agent",
       state: "done",
-      statusLabel: "Done ✓",
+      statusLabel: "Done",
       taskOrdinal: 0,
       stepId: "step-0",
       stepOrdinal: 0,
@@ -111,7 +111,7 @@ describe("feature-view-utils", () => {
       figureId: "merge-auditor",
       role: "auditor",
       state: "working",
-      statusLabel: "Merge audit running",
+      statusLabel: "Merge running",
     });
   });
 
@@ -138,7 +138,7 @@ describe("feature-view-utils", () => {
     expect(derived.figures.find((f) => f.figureId === "task-1")).toMatchObject({
       figureId: "task-1",
       state: "done",
-      statusLabel: "Done ✓",
+      statusLabel: "Done",
     });
   });
 
