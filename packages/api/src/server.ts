@@ -854,6 +854,10 @@ export async function buildServer(opts: ServerOptions) {
           summary: t.summary,
           dependsOn: JSON.stringify(t.dependsOn ?? []),
           status: "pending",
+          integrationResult: "pending",
+          integrationReason: "task_seeded",
+          integrationDetail: "Task created and waiting for cloud completion.",
+          integrationRecordedAt: now,
           createdAt: now,
           updatedAt: now,
         };
@@ -871,12 +875,24 @@ export async function buildServer(opts: ServerOptions) {
       const tasks = getFeatureTasks(db, featureId);
       const task = tasks.find((t) => t.id === taskId);
       if (!task) { reply.code(404).send({ error: "not_found" }); return; }
-      const body = req.body as { status?: string; agentId?: string; branch?: string };
+      const body = req.body as {
+        status?: string;
+        agentId?: string;
+        branch?: string;
+        integrationResult?: FeatureTaskRecord["integrationResult"];
+        integrationReason?: string;
+        integrationDetail?: string;
+        integrationRecordedAt?: string;
+      };
       const updated = upsertFeatureTask(db, {
         ...task,
         status: body.status ?? task.status,
         agentId: body.agentId ?? task.agentId,
         branch: body.branch ?? task.branch,
+        integrationResult: body.integrationResult ?? task.integrationResult,
+        integrationReason: body.integrationReason ?? task.integrationReason,
+        integrationDetail: body.integrationDetail ?? task.integrationDetail,
+        integrationRecordedAt: body.integrationRecordedAt ?? task.integrationRecordedAt,
         updatedAt: new Date().toISOString(),
       });
       emitOrchestratorEvent({ type: "feature_updated", featureId });

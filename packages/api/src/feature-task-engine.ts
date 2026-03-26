@@ -70,6 +70,9 @@ export function seedTasksFromSteps(
     // Task 0 has no deps; task N depends on task N-1 (sequential by default)
     dependsOn: idx === 0 ? "[]" : JSON.stringify([ids[idx - 1]]),
     status: "pending",
+    integrationResult: "pending",
+    integrationReason: "waiting_for_cloud_completion",
+    integrationRecordedAt: now,
     createdAt: now,
     updatedAt: now,
   }));
@@ -230,14 +233,14 @@ function buildFileContentContext(cwd: string, taskText: string, maxLinesPerFile 
  * Each subsequent task uses this integration branch as ref so it sees all
  * prior tasks' committed work.
  *
- * Returns the integration branch name on success, or null if merge failed.
+ * Returns merge outcome details for persistence and UI/API inspection.
  */
 function mergeTaskBranchToIntegration(opts: {
   cwd: string;
   taskBranch: string;
   integrationBranch: string;
   baseRef: string; // "main" or another base — used to create the branch the first time
-}): string | null {
+}): { ok: true; integrationBranch: string; detail: string } | { ok: false; detail: string } {
   const { cwd, taskBranch, integrationBranch, baseRef } = opts;
   try {
     const run = (cmd: string) =>
@@ -265,11 +268,18 @@ function mergeTaskBranchToIntegration(opts: {
     // Return to original HEAD to avoid leaving the repo in a detached/different branch state
     try { run(`git checkout -`); } catch { /* ignore */ }
 
-    return integrationBranch;
+    return {
+      ok: true,
+      integrationBranch,
+      detail: `Merged origin/${taskBranch} into ${integrationBranch}.`,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[task-engine] merge integration failed: ${msg.slice(0, 200)}`);
-    return null;
+    return {
+      ok: false,
+      detail: msg.slice(0, 1000),
+    };
   }
 }
 
@@ -410,6 +420,10 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
           status: "active",
           agentId: launched.id,
           branch: launched.branchName ?? taskBranch,
+          integrationResult: "pending",
+          integrationReason: "waiting_for_cloud_completion",
+          integrationDetail: "Cloud agent launched; waiting for terminal status.",
+          integrationRecordedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
 
@@ -423,7 +437,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
           agentId: launched.id,
           apiKey,
           intervalMs: pollIntervalMs,
-          onUpdate: (status) => {
+          onUpdate: () => {
             // Only update the agent's external status — don't overwrite task.status
             upsertFeatureTask(db, {
               ...(getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? task),
@@ -437,12 +451,21 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
             const taskStatus = status === "FINISHED" ? "done" : "failed";
             const latestTask = getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? task;
             const completedBranch = launched.branchName ?? taskBranch;
+            const terminalAt = new Date().toISOString();
             upsertFeatureTask(db, {
               ...latestTask,
               status: taskStatus,
               agentId: launched.id,
               branch: completedBranch,
-              updatedAt: new Date().toISOString(),
+              integrationResult: taskStatus === "done" ? "cloud_completed" : "not_applicable",
+              integrationReason: taskStatus === "done" ? "cloud_agent_finished" : "cloud_agent_failed",
+              integrationDetail: summary
+                ? summary.slice(0, 1000)
+                : taskStatus === "done"
+                  ? "Cloud agent reported FINISHED."
+                  : "Cloud agent ended without FINISHED status.",
+              integrationRecordedAt: terminalAt,
+              updatedAt: terminalAt,
             });
 
             log(
@@ -452,16 +475,34 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
 
             // Merge completed task branch into integration branch so subsequent tasks see this work
             if (taskStatus === "done") {
-              const merged = mergeTaskBranchToIntegration({
+              const mergeOutcome = mergeTaskBranchToIntegration({
                 cwd,
                 taskBranch: completedBranch,
                 integrationBranch,
                 baseRef: ref,
               });
-              if (merged) {
+              if (mergeOutcome.ok) {
                 currentRef = integrationBranch;
+                const afterMerge = getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? latestTask;
+                upsertFeatureTask(db, {
+                  ...afterMerge,
+                  integrationResult: "integrated_completed",
+                  integrationReason: "merged_into_integration_branch",
+                  integrationDetail: mergeOutcome.detail,
+                  integrationRecordedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
                 log(`Merged task [${task.ordinal}] into integration branch ${integrationBranch}`, "merge");
               } else {
+                const afterMerge = getFeatureTasks(db, fid).find((t) => t.id === task.id) ?? latestTask;
+                upsertFeatureTask(db, {
+                  ...afterMerge,
+                  integrationResult: "integration_failed",
+                  integrationReason: "integration_merge_failed",
+                  integrationDetail: mergeOutcome.detail,
+                  integrationRecordedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
                 log(`Integration merge skipped for task [${task.ordinal}] (branch may have no commits)`, "note");
               }
             }
@@ -472,7 +513,16 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        upsertFeatureTask(db, { ...task, status: "failed", updatedAt: new Date().toISOString() });
+        const now = new Date().toISOString();
+        upsertFeatureTask(db, {
+          ...task,
+          status: "failed",
+          integrationResult: "not_applicable",
+          integrationReason: "agent_launch_failed",
+          integrationDetail: msg.slice(0, 1000),
+          integrationRecordedAt: now,
+          updatedAt: now,
+        });
         log(`L2 agent launch failed for task "${task.title}": ${msg.slice(0, 500)}`, "error");
         onTaskTerminal();
       }
