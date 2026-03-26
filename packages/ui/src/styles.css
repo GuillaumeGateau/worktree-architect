@@ -1535,3 +1535,173 @@ a.btn-primary {
     transition: none;
   }
 }
+
+/* Agent stage figure (SVG stick character) */
+.agent-figure {
+  --agent-size: 72px;
+  --agent-stroke: currentColor;
+  --agent-fill: color-mix(in oklab, var(--accent, #2563eb) 26%, transparent);
+  --agent-shadow: color-mix(in oklab, var(--text, #111827) 24%, transparent);
+  --agent-label: var(--muted, #6b7280);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  width: var(--agent-size);
+  color: var(--text, #0f172a);
+}
+
+.agent-figure-svg {
+  width: var(--agent-size);
+  height: calc(var(--agent-size) * 1.375);
+  overflow: visible;
+}
+
+.agent-figure-label {
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--agent-label);
+  max-width: 9ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-figure .agent-body {
+  transform-origin: 32px 47px;
+}
+
+.agent-figure .agent-shadow ellipse {
+  fill: var(--agent-shadow);
+}
+
+.agent-figure .agent-halo {
+  fill: var(--agent-fill);
+  opacity: 0.4;
+}
+
+.agent-figure .agent-head {
+  fill: transparent;
+}
+
+.agent-figure .agent-head,
+.agent-figure .agent-torso,
+.agent-figure .agent-arm,
+.agent-figure .agent-leg {
+  stroke: var(--agent-stroke);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.agent-figure .agent-role-mark circle,
+.agent-figure .agent-role-mark line {
+  stroke: color-mix(in oklab, var(--accent, #2563eb) 70%, var(--text, #0f172a));
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.agent-figure--auditor {
+  --agent-fill: color-mix(in oklab, var(--accent, #2563eb) 16%, transparent);
+}
+
+.agent-figure--idle {
+  color: var(--muted, #6b7280);
+}
+
+.agent-figure--idle .agent-halo {
+  opacity: 0.2;
+}
+
+.agent-figure--walking .agent-halo {
+  opacity: 0.5;
+}
+
+.agent-figure--walking .agent-shadow {
+  animation: agent-shadow-bob 0.95s ease-in-out infinite;
+}
+
+.agent-figure--walking .agent-arm-left,
+.agent-figure--walking .agent-leg-right {
+  animation: agent-limb-swing-a 0.95s ease-in-out infinite;
+  transform-origin: 32px 35px;
+}
+
+.agent-figure--walking .agent-arm-right,
+.agent-figure--walking .agent-leg-left {
+  animation: agent-limb-swing-b 0.95s ease-in-out infinite;
+  transform-origin: 32px 35px;
+}
+
+.agent-figure--working .agent-body {
+  animation: agent-work-bob 0.8s ease-in-out infinite;
+}
+
+.agent-figure--working .agent-halo {
+  opacity: 0.55;
+}
+
+.agent-figure--done {
+  color: color-mix(in oklab, var(--accent, #16a34a) 80%, var(--text, #0f172a));
+}
+
+.agent-figure--done .agent-halo {
+  opacity: 0.62;
+}
+
+@keyframes agent-limb-swing-a {
+  0%,
+  100% {
+    transform: rotate(14deg);
+  }
+  50% {
+    transform: rotate(-14deg);
+  }
+}
+
+@keyframes agent-limb-swing-b {
+  0%,
+  100% {
+    transform: rotate(-14deg);
+  }
+  50% {
+    transform: rotate(14deg);
+  }
+}
+
+@keyframes agent-work-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes agent-shadow-bob {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.24;
+  }
+  50% {
+    transform: scaleX(0.85);
+    opacity: 0.16;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-figure--walking .agent-arm-left,
+  .agent-figure--walking .agent-leg-right,
+  .agent-figure--walking .agent-arm-right,
+  .agent-figure--walking .agent-leg-left,
+  .agent-figure--walking .agent-shadow,
+  .agent-figure--working .agent-body {
+    animation: none;
+  }
+}
