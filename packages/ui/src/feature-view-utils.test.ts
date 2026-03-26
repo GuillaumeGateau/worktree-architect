@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveAgentStageState,
+  deriveDeskState,
   extractCursorAgentId,
   filterAndReverseActivity,
+  mapFigureStateToDeskState,
   sortStepsByOrdinal,
   toHumanStatusLabel,
 } from "./feature-view-utils";
@@ -131,5 +133,44 @@ describe("feature-view-utils", () => {
       state: "done",
       statusLabel: "Done ✓",
     });
+  });
+
+  it("maps figure states to desk states", () => {
+    expect(mapFigureStateToDeskState("idle")).toBe("empty");
+    expect(mapFigureStateToDeskState("walking")).toBe("arriving");
+    expect(mapFigureStateToDeskState("working")).toBe("active");
+    expect(mapFigureStateToDeskState("done")).toBe("complete");
+  });
+
+  it("derives desk state and agent-to-desk mapping", () => {
+    const derived = deriveDeskState(
+      [
+        {
+          id: "a1",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [1] "Wire stage" — https://cursor.com/agents/agt_task1 (branch: orch-task)',
+          createdAt: "2026-03-25T11:00:00.000Z",
+        },
+        {
+          id: "a2",
+          kind: "tool",
+          message: "Running tests…",
+          stepId: "step-1",
+          createdAt: "2026-03-25T11:01:00.000Z",
+        },
+      ],
+      [{ id: "step-1", ordinal: 1 }]
+    );
+
+    expect(derived.desks).toEqual([
+      expect.objectContaining({
+        deskId: "desk-task-1",
+        figureId: "task-1",
+        deskState: "active",
+        agentId: "agt_task1",
+      }),
+    ]);
+    expect(derived.agentIdToDesk).toEqual({ agt_task1: "desk-task-1" });
   });
 });
