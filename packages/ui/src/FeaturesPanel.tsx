@@ -186,6 +186,7 @@ export function FeaturesPanel(props: {
       sortedSteps.map((step, idx) => [step.ordinal, idx] as const)
     );
     const taskCount = sortedSteps.length;
+    const motionNowMs = Date.now();
     return derived.figures
       .slice()
       .sort((a, b) => {
@@ -193,7 +194,7 @@ export function FeaturesPanel(props: {
         return (a.stepOrdinal ?? a.taskOrdinal ?? 0) - (b.stepOrdinal ?? b.taskOrdinal ?? 0);
       })
       .map((figure, lane) => {
-        const zone = motionZoneForFigure(figure);
+        const zone = motionZoneForFigure(figure, motionNowMs);
         return {
           figure,
           lane,

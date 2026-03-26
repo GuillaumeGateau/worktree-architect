@@ -167,6 +167,7 @@ describe("feature-view-utils", () => {
   });
 
   it("maps figure states to movement zones", () => {
+    const nowMs = Date.parse("2026-03-25T00:00:01.000Z");
     expect(
       motionZoneForFigure({
         figureId: "task-1",
@@ -174,7 +175,7 @@ describe("feature-view-utils", () => {
         state: "walking",
         statusLabel: "Walking to task",
         updatedAt: "2026-03-25T00:00:00.000Z",
-      })
+      }, nowMs)
     ).toBe("transition");
 
     expect(
@@ -184,7 +185,17 @@ describe("feature-view-utils", () => {
         state: "working",
         statusLabel: "Working",
         updatedAt: "2026-03-25T00:00:00.000Z",
-      })
+      }, nowMs)
+    ).toBe("transition");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "task-1",
+        role: "agent",
+        state: "working",
+        statusLabel: "Working",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      }, nowMs + 2500)
     ).toBe("task");
 
     expect(
@@ -194,7 +205,17 @@ describe("feature-view-utils", () => {
         state: "working",
         statusLabel: "Merge audit running",
         updatedAt: "2026-03-25T00:00:00.000Z",
-      })
+      }, nowMs)
+    ).toBe("transition");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "merge-auditor",
+        role: "auditor",
+        state: "working",
+        statusLabel: "Merge audit running",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      }, nowMs + 2500)
     ).toBe("merge");
 
     expect(
@@ -204,7 +225,17 @@ describe("feature-view-utils", () => {
         state: "done",
         statusLabel: "Merge done ✓",
         updatedAt: "2026-03-25T00:00:00.000Z",
-      })
+      }, nowMs)
+    ).toBe("transition");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "merge-auditor",
+        role: "auditor",
+        state: "done",
+        statusLabel: "Merge done ✓",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      }, nowMs + 2500)
     ).toBe("desk");
   });
 
@@ -230,6 +261,37 @@ describe("feature-view-utils", () => {
       statusLabel: "Done ✓",
       stepId: "step-1",
       stepOrdinal: 1,
+    });
+  });
+
+  it("prefers newer step updates over stale activity state", () => {
+    const derived = deriveAgentStageState(
+      [
+        {
+          id: "a1",
+          kind: "tool",
+          message: "Running tests…",
+          stepId: "step-0",
+          createdAt: "2026-03-25T11:00:00.000Z",
+        },
+      ],
+      [
+        {
+          id: "step-0",
+          ordinal: 0,
+          status: "done",
+          updatedAt: "2026-03-25T11:00:05.000Z",
+        },
+      ]
+    );
+
+    expect(derived.figures.find((f) => f.figureId === "task-0")).toMatchObject({
+      figureId: "task-0",
+      state: "done",
+      statusLabel: "Done ✓",
+      stepId: "step-0",
+      stepOrdinal: 0,
+      updatedAt: "2026-03-25T11:00:05.000Z",
     });
   });
 
