@@ -628,7 +628,7 @@ export function FeaturesPanel(props: {
                 <div className="office-stage-head">
                   <h3 className="subsection-title">Shared office</h3>
                   <p className="muted-sm">
-                    Agents leave their desk as work starts and return when complete.
+                    Agents move desk → task zone → merge, then return when complete.
                   </p>
                 </div>
                 <div className="office-stage-track" style={{ height: `${officeTrackHeight}px` }}>
@@ -639,7 +639,7 @@ export function FeaturesPanel(props: {
                     const left = 36 + (idx / laneCount) * 40;
                     return (
                       <span key={step.id} className="office-zone-label office-zone-task" style={{ left: `${left}%` }}>
-                        Zone {step.ordinal}
+                        Task {step.ordinal}
                       </span>
                     );
                   })}
