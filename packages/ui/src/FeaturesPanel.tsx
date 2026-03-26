@@ -14,12 +14,12 @@ import {
   countRunningCloudAgents,
   deriveAgentStageState,
   deriveDeskState,
+  deriveOfficeSceneState,
   deriveSceneRoleStatusLines,
   filterAndReverseActivity,
-  motionZoneForFigure,
   sortStepsByOrdinal,
 } from "./feature-view-utils";
-import type { AgentStageFigure, AgentStageMotionZone } from "./feature-view-utils";
+import type { AgentStageFigure } from "./feature-view-utils";
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
 import { FooA } from "./FooA";
 import { FooB } from "./FooB";
@@ -76,30 +76,46 @@ function latestActivityRows(activity: ActivityEventRow[], max: number): Activity
   return sorted.slice(0, max);
 }
 
-const OFFICE_DESK_X = 6;
-const OFFICE_MERGE_X = 92;
-
 function figureDisplayName(figure: AgentStageFigure): string {
   if (figure.role === "auditor") return "Merge auditor";
   if (figure.taskOrdinal !== undefined) return `Task ${figure.taskOrdinal}`;
   return "Task agent";
 }
 
-function figureTargetPercent(
-  figure: AgentStageFigure,
-  zone: AgentStageMotionZone,
-  taskOrdinalToIndex: Map<number, number>,
-  taskCount: number
-): number {
-  const laneCount = Math.max(taskCount, 1);
-  const taskIndex =
-    figure.stepOrdinal !== undefined ? taskOrdinalToIndex.get(figure.stepOrdinal) ?? 0 : 0;
-  const taskX = 36 + (taskIndex / laneCount) * 40;
-  if (zone === "desk") return OFFICE_DESK_X;
-  if (zone === "merge") return OFFICE_MERGE_X;
-  if (zone === "task") return taskX;
-  const destination = figure.role === "auditor" ? OFFICE_MERGE_X : taskX;
-  return Math.max(OFFICE_DESK_X + 10, destination - 10);
+function toPercent(value: number, total: number): string {
+  if (total <= 0) return "0%";
+  return `${((value / total) * 100).toFixed(2)}%`;
+}
+
+function zoneStyle(kind: string): { borderColor: string; background: string } {
+  if (kind === "desk") {
+    return {
+      borderColor: "rgba(93, 111, 137, 0.45)",
+      background: "rgba(93, 111, 137, 0.1)",
+    };
+  }
+  if (kind === "hub") {
+    return {
+      borderColor: "rgba(13, 116, 216, 0.5)",
+      background: "rgba(13, 116, 216, 0.12)",
+    };
+  }
+  if (kind === "review") {
+    return {
+      borderColor: "rgba(143, 69, 179, 0.5)",
+      background: "rgba(143, 69, 179, 0.13)",
+    };
+  }
+  return {
+    borderColor: "rgba(17, 123, 86, 0.5)",
+    background: "rgba(17, 123, 86, 0.12)",
+  };
+}
+
+function figureStateClassForLifecycle(lifecycle: string): "idle" | "working" | "done" {
+  if (lifecycle === "active" || lifecycle === "review" || lifecycle === "testing") return "working";
+  if (lifecycle === "done" || lifecycle === "failed" || lifecycle === "cancelled") return "done";
+  return "idle";
 }
 
 function formatDetailsJson(details: Record<string, unknown> | undefined): string | null {
@@ -176,33 +192,36 @@ export function FeaturesPanel(props: {
 
   const deskState = useMemo(() => deriveDeskState(activity, sortedSteps), [activity, sortedSteps]);
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
-  const deskFigures = useMemo(
-    () => deriveAgentStageState(activity, sortedSteps).figures,
-    [activity, sortedSteps]
+  const stageState = useMemo(() => deriveAgentStageState(activity, sortedSteps), [activity, sortedSteps]);
+  const deskFigures = stageState.figures;
+  const figureById = useMemo(
+    () => new Map(deskFigures.map((figure) => [figure.figureId, figure] as const)),
+    [deskFigures]
   );
-  const officeFigures = useMemo(() => {
-    const derived = deriveAgentStageState(activity, sortedSteps);
-    const taskOrdinalToIndex = new Map(
-      sortedSteps.map((step, idx) => [step.ordinal, idx] as const)
-    );
-    const taskCount = sortedSteps.length;
-    return derived.figures
-      .slice()
-      .sort((a, b) => {
-        if (a.role !== b.role) return a.role === "agent" ? -1 : 1;
-        return (a.stepOrdinal ?? a.taskOrdinal ?? 0) - (b.stepOrdinal ?? b.taskOrdinal ?? 0);
-      })
-      .map((figure, lane) => {
-        const zone = motionZoneForFigure(figure);
-        return {
-          figure,
-          lane,
-          zone,
-          x: figureTargetPercent(figure, zone, taskOrdinalToIndex, taskCount),
-        };
-      });
-  }, [activity, sortedSteps]);
-  const officeTrackHeight = Math.max(128, officeFigures.length * 34 + 24);
+  const officeScene = useMemo(() => {
+    const deskCount = Math.max(sortedSteps.length, stageState.figures.length, 1);
+    const deskColumns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(deskCount))));
+    return deriveOfficeSceneState(stageState.figures, {
+      deskCount,
+      deskColumns,
+    });
+  }, [sortedSteps.length, stageState.figures]);
+  const officeZoneById = useMemo(() => {
+    const map = new Map<string, (typeof officeScene.layout.desks)[number] | typeof officeScene.layout.zones.hub>();
+    for (const desk of officeScene.layout.desks) map.set(desk.id, desk);
+    map.set(officeScene.layout.zones.hub.id, officeScene.layout.zones.hub);
+    map.set(officeScene.layout.zones.review.id, officeScene.layout.zones.review);
+    map.set(officeScene.layout.zones.test.id, officeScene.layout.zones.test);
+    return map;
+  }, [officeScene.layout.desks, officeScene.layout.zones.hub, officeScene.layout.zones.review, officeScene.layout.zones.test]);
+  const highlightedTransitPathIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const placement of officeScene.placements) {
+      for (const pathId of placement.transitPathIds) set.add(pathId);
+    }
+    return set;
+  }, [officeScene.placements]);
+  const officeTrackHeight = Math.max(180, officeScene.layout.bounds.height);
   const sceneRoleStatus = useMemo(
     () => deriveSceneRoleStatusLines(detail?.feature.status, sortedSteps, activity),
     [activity, detail?.feature.status, sortedSteps]
@@ -623,7 +642,7 @@ export function FeaturesPanel(props: {
               <DeskAgentAvatars figures={deskFigures} />
             )}
 
-            {(detail.feature.status === "executing" || officeFigures.length > 0) && (
+            {(detail.feature.status === "executing" || officeScene.placements.length > 0) && (
               <section className="office-stage card" aria-label="Shared office movement">
                 <div className="office-stage-head">
                   <h3 className="subsection-title">Shared office</h3>
@@ -632,30 +651,100 @@ export function FeaturesPanel(props: {
                   </p>
                 </div>
                 <div className="office-stage-track" style={{ height: `${officeTrackHeight}px` }}>
-                  <span className="office-zone-label office-zone-desk">Desk</span>
-                  <span className="office-zone-label office-zone-merge">Merge</span>
-                  {sortedSteps.map((step, idx) => {
-                    const laneCount = Math.max(sortedSteps.length, 1);
-                    const left = 36 + (idx / laneCount) * 40;
+                  <svg
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {officeScene.layout.transitPaths.map((path) => (
+                      <polyline
+                        key={path.id}
+                        points={path.points
+                          .map((point) => {
+                            const x = toPercent(point.x, officeScene.layout.bounds.width);
+                            const y = toPercent(point.y, officeScene.layout.bounds.height);
+                            return `${x},${y}`;
+                          })
+                          .join(" ")}
+                        fill="none"
+                        stroke={
+                          highlightedTransitPathIds.has(path.id)
+                            ? "rgba(13, 116, 216, 0.72)"
+                            : "rgba(93, 111, 137, 0.34)"
+                        }
+                        strokeWidth={highlightedTransitPathIds.has(path.id) ? 2.2 : 1.3}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    ))}
+                  </svg>
+                  {[...officeScene.layout.desks, ...Object.values(officeScene.layout.zones)].map((zone) => {
+                    const visual = zoneStyle(zone.kind);
                     return (
-                      <span key={step.id} className="office-zone-label office-zone-task" style={{ left: `${left}%` }}>
-                        Zone {step.ordinal}
-                      </span>
+                      <div
+                        key={zone.id}
+                        style={{
+                          position: "absolute",
+                          left: toPercent(
+                            zone.center.x - zone.size.width / 2,
+                            officeScene.layout.bounds.width
+                          ),
+                          top: toPercent(
+                            zone.center.y - zone.size.height / 2,
+                            officeScene.layout.bounds.height
+                          ),
+                          width: toPercent(zone.size.width, officeScene.layout.bounds.width),
+                          height: toPercent(zone.size.height, officeScene.layout.bounds.height),
+                          borderRadius: "9px",
+                          border: `1px solid ${visual.borderColor}`,
+                          background: visual.background,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "0.64rem",
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            color: "var(--muted)",
+                          }}
+                        >
+                          {zone.label}
+                        </span>
+                      </div>
                     );
                   })}
-                  {officeFigures.map(({ figure, lane, zone, x }) => (
-                    <div
-                      key={figure.figureId}
-                      className={`office-figure role-${figure.role} state-${figure.state} zone-${zone}`}
-                      style={{
-                        top: `${16 + lane * 34}px`,
-                        transform: `translate3d(${x.toFixed(2)}%, 0, 0)`,
-                      }}
-                    >
-                      <span className="office-figure-chip">{figureDisplayName(figure)}</span>
-                      <span className="office-figure-status">{figure.statusLabel}</span>
-                    </div>
-                  ))}
+                  {officeScene.placements.map((placement) => {
+                    const figure = figureById.get(placement.figureId);
+                    const zone =
+                      officeZoneById.get(placement.currentZoneId) ??
+                      officeZoneById.get(placement.deskZoneId);
+                    if (!figure || !zone) return null;
+                    return (
+                      <div
+                        key={figure.figureId}
+                        className={`office-figure role-${figure.role} state-${figureStateClassForLifecycle(
+                          placement.lifecycleState
+                        )}`}
+                        style={{
+                          left: toPercent(zone.center.x, officeScene.layout.bounds.width),
+                          top: toPercent(zone.center.y, officeScene.layout.bounds.height),
+                          transform: "translate(-50%, -50%)",
+                        }}
+                      >
+                        <span className="office-figure-chip">{figureDisplayName(figure)}</span>
+                        <span className="office-figure-status">{figure.statusLabel}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
