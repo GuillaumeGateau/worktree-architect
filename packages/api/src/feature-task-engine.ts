@@ -33,6 +33,67 @@ import { emitOrchestratorEvent } from "./event-bus.js";
 import type { OrchestratorYamlConfig } from "./config.js";
 import type { FeatureRun } from "@orch-os/core";
 
+type TaskIntegrationOutcome = {
+  taskId: string;
+  ordinal: number;
+  title: string;
+  required: boolean;
+  status: "merged" | "failed";
+  taskBranch?: string;
+  integrationBranch: string;
+  reason?: string;
+  updatedAt: string;
+};
+
+function readTaskIntegrationOutcomes(value: unknown): Record<string, TaskIntegrationOutcome> {
+  if (!value || typeof value !== "object") return {};
+  const out: Record<string, TaskIntegrationOutcome> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!raw || typeof raw !== "object") continue;
+    const obj = raw as Record<string, unknown>;
+    const taskId = typeof obj.taskId === "string" ? obj.taskId : key;
+    const ordinal = typeof obj.ordinal === "number" ? obj.ordinal : -1;
+    const title = typeof obj.title === "string" ? obj.title : "";
+    const required = obj.required !== false;
+    const status = obj.status === "merged" ? "merged" : obj.status === "failed" ? "failed" : undefined;
+    const integrationBranch = typeof obj.integrationBranch === "string" ? obj.integrationBranch : "";
+    if (!status || !integrationBranch) continue;
+    out[key] = {
+      taskId,
+      ordinal,
+      title,
+      required,
+      status,
+      integrationBranch,
+      taskBranch: typeof obj.taskBranch === "string" ? obj.taskBranch : undefined,
+      reason: typeof obj.reason === "string" ? obj.reason : undefined,
+      updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : new Date().toISOString(),
+    };
+  }
+  return out;
+}
+
+function evaluateRequiredIntegrations(
+  tasks: FeatureTaskRecord[],
+  outcomes: Record<string, TaskIntegrationOutcome>
+): { ok: true } | { ok: false; issues: string[] } {
+  const issues: string[] = [];
+  for (const t of tasks) {
+    if (t.status !== "done") continue;
+    const outcome = outcomes[t.id];
+    if (!outcome || outcome.required === false) {
+      issues.push(`task [${t.ordinal}] "${t.title}" is done but missing required integration evidence`);
+      continue;
+    }
+    if (outcome.status !== "merged") {
+      const reason = outcome.reason ? ` (${outcome.reason})` : "";
+      issues.push(`task [${t.ordinal}] "${t.title}" integration ${outcome.status}${reason}`);
+    }
+  }
+  if (issues.length > 0) return { ok: false, issues };
+  return { ok: true };
+}
+
 export type TaskEngineOptions = {
   db: Database.Database;
   feature: FeatureRun;
@@ -363,6 +424,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
   const links = feature.linksJson
     ? (JSON.parse(feature.linksJson) as Record<string, unknown>)
     : {};
+  const taskIntegrationOutcomes = readTaskIntegrationOutcomes(links.taskIntegrationOutcomes);
   const targetPath = links.targetPath as string | undefined;
   const repoContext = buildRepoContext(cwd, targetPath);
   const activityBaseUrl = process.env.ORCHESTRATOR_ACTIVITY_BASE_URL;
@@ -373,6 +435,22 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
   function log(message: string, kind: "plan" | "tool" | "agent" | "note" | "error" | "merge" = "note") {
     const ev = appendActivity(db, fid, { kind, message: message.slice(0, 4000) });
     if (ev) emitActivity(fid, ev);
+    emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
+  }
+
+  function saveTaskIntegrationOutcome(task: FeatureTaskRecord, outcome: TaskIntegrationOutcome): void {
+    taskIntegrationOutcomes[task.id] = outcome;
+    mergeFeatureLinks(db, fid, { taskIntegrationOutcomes });
+  }
+
+  function failFeatureForIntegrationGate(issues: string[]): void {
+    mergeFeatureLinks(db, fid, {
+      taskEngineStatus: "failed",
+      requiredTaskIntegrationsGate: "failed",
+      requiredTaskIntegrationIssues: issues,
+      taskIntegrationOutcomes,
+    });
+    patchFeature(db, fid, { status: "failed" });
     emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
   }
 
@@ -459,9 +537,30 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
                 baseRef: ref,
               });
               if (merged) {
+                saveTaskIntegrationOutcome(latestTask, {
+                  taskId: latestTask.id,
+                  ordinal: latestTask.ordinal,
+                  title: latestTask.title,
+                  required: true,
+                  status: "merged",
+                  taskBranch: completedBranch,
+                  integrationBranch,
+                  updatedAt: new Date().toISOString(),
+                });
                 currentRef = integrationBranch;
                 log(`Merged task [${task.ordinal}] into integration branch ${integrationBranch}`, "merge");
               } else {
+                saveTaskIntegrationOutcome(latestTask, {
+                  taskId: latestTask.id,
+                  ordinal: latestTask.ordinal,
+                  title: latestTask.title,
+                  required: true,
+                  status: "failed",
+                  taskBranch: completedBranch,
+                  integrationBranch,
+                  reason: "merge_failed_or_missing_commits",
+                  updatedAt: new Date().toISOString(),
+                });
                 log(`Integration merge skipped for task [${task.ordinal}] (branch may have no commits)`, "note");
               }
             }
@@ -501,8 +600,22 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
       return;
     }
 
+    const integrationGate = evaluateRequiredIntegrations(tasks, taskIntegrationOutcomes);
+    if (!integrationGate.ok) {
+      log(
+        `Required task integration gate failed. Feature cannot be marked completed. ${integrationGate.issues.join("; ")}`,
+        "error"
+      );
+      failFeatureForIntegrationGate(integrationGate.issues);
+      return;
+    }
+
     log("All L2 tasks completed. Launching merge auditor…", "plan");
-    mergeFeatureLinks(db, fid, { taskEngineStatus: "auditing" });
+    mergeFeatureLinks(db, fid, {
+      taskEngineStatus: "auditing",
+      requiredTaskIntegrationsGate: "passed",
+      taskIntegrationOutcomes,
+    });
 
     // Auditor gets the integration branch (which has all tasks merged into it)
     const auditorRef = currentRef;
@@ -543,10 +656,23 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
             emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
           },
           onTerminal: (status, summary) => {
+            const latestTasks = getFeatureTasks(db, fid);
+            const integrationGate = evaluateRequiredIntegrations(latestTasks, taskIntegrationOutcomes);
+            if (status === "FINISHED" && !integrationGate.ok) {
+              failFeatureForIntegrationGate(integrationGate.issues);
+              mergeFeatureLinks(db, fid, { mergeAuditorStatus: status });
+              log(
+                `Merge auditor completed but required task integrations gate failed. ${integrationGate.issues.join("; ")}`,
+                "error"
+              );
+              return;
+            }
             const featureStatus = status === "FINISHED" ? "completed" : "failed";
             mergeFeatureLinks(db, fid, {
               taskEngineStatus: featureStatus,
               mergeAuditorStatus: status,
+              requiredTaskIntegrationsGate: featureStatus === "completed" ? "passed" : "failed",
+              taskIntegrationOutcomes,
             });
             patchFeature(db, fid, { status: featureStatus });
             log(
