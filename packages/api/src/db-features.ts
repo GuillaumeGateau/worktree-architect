@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import type {
   ActivityEvent,
   CreateFeatureBody,
+  FeatureListArchiveFilter,
   FeatureRun,
   FeatureStep,
   PatchFeatureBody,
@@ -17,11 +18,19 @@ import {
 } from "@orch-os/core";
 
 export function rowToFeature(row: Record<string, unknown>): FeatureRun {
+  const archivedRaw = row.archived;
+  const archived =
+    archivedRaw === 1 ||
+    archivedRaw === "1" ||
+    archivedRaw === true ||
+    archivedRaw === "true";
   return {
     id: String(row.id),
     title: String(row.title),
     summary: row.summary ? String(row.summary) : undefined,
     status: row.status as FeatureStatus,
+    archived,
+    archivedAt: row.archived_at ? String(row.archived_at) : undefined,
     risks: row.risks ? String(row.risks) : undefined,
     dependencies: row.dependencies ? String(row.dependencies) : undefined,
     linksJson: row.links_json ? String(row.links_json) : undefined,
@@ -89,7 +98,38 @@ function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
 export function listFeatures(db: Database.Database): FeatureRun[] {
   const rows = db
     .prepare(
-      `SELECT id, title, summary, status, risks, dependencies, links_json, created_at, updated_at
+      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
+       FROM feature_runs ORDER BY updated_at DESC`
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map(rowToFeature);
+}
+
+export function listFeaturesByArchive(
+  db: Database.Database,
+  archiveFilter: FeatureListArchiveFilter
+): FeatureRun[] {
+  if (archiveFilter === "archived") {
+    const rows = db
+      .prepare(
+        `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
+         FROM feature_runs WHERE archived = 1 ORDER BY updated_at DESC`
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map(rowToFeature);
+  }
+  if (archiveFilter === "active") {
+    const rows = db
+      .prepare(
+        `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
+         FROM feature_runs WHERE archived = 0 ORDER BY updated_at DESC`
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map(rowToFeature);
+  }
+  const rows = db
+    .prepare(
+      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
        FROM feature_runs ORDER BY updated_at DESC`
     )
     .all() as Record<string, unknown>[];
@@ -99,7 +139,8 @@ export function listFeatures(db: Database.Database): FeatureRun[] {
 export function getFeature(db: Database.Database, id: string): FeatureRun | undefined {
   const row = db
     .prepare(
-      `SELECT id, title, summary, status, risks, dependencies, links_json, created_at, updated_at FROM feature_runs WHERE id = ?`
+      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
+       FROM feature_runs WHERE id = ?`
     )
     .get(id) as Record<string, unknown> | undefined;
   return row ? rowToFeature(row) : undefined;
@@ -114,13 +155,15 @@ export function createFeature(
   const status = body.status ?? "draft";
   const linksJson = body.links ? JSON.stringify(body.links) : null;
   db.prepare(
-    `INSERT INTO feature_runs (id, title, summary, status, risks, dependencies, links_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO feature_runs (id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     body.title,
     body.summary ?? null,
     status,
+    0,
+    null,
     body.risks ?? null,
     body.dependencies ?? null,
     linksJson,

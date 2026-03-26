@@ -32,6 +32,8 @@ export function openDb(sqlitePath: string): Database.Database {
       title TEXT NOT NULL,
       summary TEXT,
       status TEXT NOT NULL,
+      archived INTEGER NOT NULL DEFAULT 0,
+      archived_at TEXT,
       risks TEXT,
       dependencies TEXT,
       links_json TEXT,
@@ -76,6 +78,18 @@ export function openDb(sqlitePath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_activity_feature ON activity_events(feature_id);
   `);
+  // Backfill archive columns for existing databases created before archive support.
+  const featureRunColumns = db
+    .prepare(`PRAGMA table_info(feature_runs)`)
+    .all() as { name: string }[];
+  const hasArchived = featureRunColumns.some((c) => c.name === "archived");
+  const hasArchivedAt = featureRunColumns.some((c) => c.name === "archived_at");
+  if (!hasArchived) {
+    db.exec(`ALTER TABLE feature_runs ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!hasArchivedAt) {
+    db.exec(`ALTER TABLE feature_runs ADD COLUMN archived_at TEXT`);
+  }
   return db;
 }
 

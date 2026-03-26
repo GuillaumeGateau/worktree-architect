@@ -44,6 +44,9 @@ export const FeatureRunSchema = z.object({
   title: z.string(),
   summary: z.string().optional(),
   status: FeatureStatusSchema,
+  // Soft-archive semantics: archiving hides runs from default lists but never deletes.
+  archived: z.boolean(),
+  archivedAt: z.string().optional(),
   risks: z.string().optional(),
   dependencies: z.string().optional(),
   linksJson: z.string().optional(),
@@ -51,6 +54,22 @@ export const FeatureRunSchema = z.object({
   updatedAt: z.string(),
 });
 export type FeatureRun = z.infer<typeof FeatureRunSchema>;
+
+/** API list filter for active-vs-archived run retrieval. */
+export const FeatureListArchiveFilterSchema = z.enum([
+  "active",
+  "archived",
+  "all",
+]);
+export type FeatureListArchiveFilter = z.infer<
+  typeof FeatureListArchiveFilterSchema
+>;
+
+/** GET /features query: defaults to active-only list. */
+export const ListFeaturesQuerySchema = z.object({
+  archive: FeatureListArchiveFilterSchema.optional(),
+});
+export type ListFeaturesQuery = z.infer<typeof ListFeaturesQuerySchema>;
 
 export const FeatureStepSchema = z.object({
   id: z.string(),

@@ -9,6 +9,7 @@ import type { JobEnvelope, JobStatus, FeatureRun, FeatureStep, ActivityEvent } f
 import {
   canTransition,
   JobStatusSchema,
+  ListFeaturesQuerySchema,
   CreateFeatureBodySchema,
   PatchFeatureBodySchema,
   AppendActivityBodySchema,
@@ -25,6 +26,7 @@ import {
 } from "./db.js";
 import {
   listFeatures,
+  listFeaturesByArchive,
   getFeature,
   createFeature,
   patchFeature,
@@ -183,6 +185,8 @@ function featureToJSON(r: FeatureRun) {
     title: r.title,
     summary: r.summary,
     status: r.status,
+    archived: r.archived,
+    archivedAt: r.archivedAt,
     risks: r.risks,
     dependencies: r.dependencies,
     links: r.linksJson ? JSON.parse(r.linksJson) : undefined,
@@ -354,9 +358,17 @@ export async function buildServer(opts: ServerOptions) {
     return updated;
   });
 
-  app.get("/api/v1/features", async () => ({
-    features: listFeatures(db).map(featureToJSON),
-  }));
+  app.get<{ Querystring: { archive?: string } }>("/api/v1/features", async (req, reply) => {
+    const parsed = ListFeaturesQuerySchema.safeParse(req.query ?? {});
+    if (!parsed.success) {
+      reply.code(400).send({ error: "invalid_query", details: parsed.error.flatten() });
+      return;
+    }
+    // Default to active runs so archived runs do not pollute primary dashboard lists.
+    const archiveFilter = parsed.data.archive ?? "active";
+    const features = listFeaturesByArchive(db, archiveFilter).map(featureToJSON);
+    return { features, archive: archiveFilter };
+  });
 
   app.post("/api/v1/features", async (req, reply) => {
     const parsed = CreateFeatureBodySchema.safeParse(req.body);

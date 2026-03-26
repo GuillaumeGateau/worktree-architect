@@ -25,6 +25,8 @@ export type FeatureRow = {
   title: string;
   summary?: string;
   status: string;
+  archived: boolean;
+  archivedAt?: string;
   risks?: string;
   dependencies?: string;
   links?: Record<string, unknown>;

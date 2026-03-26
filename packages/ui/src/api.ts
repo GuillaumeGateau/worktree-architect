@@ -1,5 +1,7 @@
 const base = "";
 
+export type FeatureArchiveFilter = "active" | "archived" | "all";
+
 function featureApiError(resource: string, status: number): Error {
   if (status === 404) {
     return new Error(
@@ -9,8 +11,11 @@ function featureApiError(resource: string, status: number): Error {
   return new Error(`${resource} ${status}`);
 }
 
-export async function fetchFeatures(): Promise<import("./types").FeatureRow[]> {
-  const r = await fetch(`${base}/api/v1/features`);
+export async function fetchFeatures(
+  archive: FeatureArchiveFilter = "active"
+): Promise<import("./types").FeatureRow[]> {
+  const q = new URLSearchParams({ archive });
+  const r = await fetch(`${base}/api/v1/features?${q}`);
   if (!r.ok) throw featureApiError("features", r.status);
   const data = (await r.json()) as { features: import("./types").FeatureRow[] };
   return data.features;

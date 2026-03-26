@@ -352,6 +352,85 @@ autoCursorCloudAgentOnStart: false
     await app.close();
   });
 
+  it("features list defaults to active and supports archive query filter", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-archive-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+    const createA = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: { title: "Active run", status: "ready" },
+    });
+    const createB = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: { title: "Archived run", status: "completed" },
+    });
+    expect(createA.statusCode).toBe(200);
+    expect(createB.statusCode).toBe(200);
+    const activeId = (JSON.parse(createA.body) as { id: string }).id;
+    const archivedId = (JSON.parse(createB.body) as { id: string }).id;
+
+    // Seed one archived record directly to validate list contract behavior.
+    const BetterSqlite3 = (await import("better-sqlite3")).default;
+    const db = new BetterSqlite3(join(dir, ".orchestrator/test.db"));
+    db.prepare(`UPDATE feature_runs SET archived = 1, archived_at = ? WHERE id = ?`).run(
+      new Date().toISOString(),
+      archivedId
+    );
+    db.close();
+
+    const listDefault = await app.inject({ method: "GET", url: "/api/v1/features" });
+    expect(listDefault.statusCode).toBe(200);
+    const defaultBody = JSON.parse(listDefault.body) as {
+      archive: string;
+      features: { id: string; archived: boolean; archivedAt?: string }[];
+    };
+    expect(defaultBody.archive).toBe("active");
+    expect(defaultBody.features.some((f) => f.id === activeId)).toBe(true);
+    expect(defaultBody.features.some((f) => f.id === archivedId)).toBe(false);
+
+    const listArchived = await app.inject({
+      method: "GET",
+      url: "/api/v1/features?archive=archived",
+    });
+    expect(listArchived.statusCode).toBe(200);
+    const archivedBody = JSON.parse(listArchived.body) as {
+      archive: string;
+      features: { id: string; archived: boolean; archivedAt?: string }[];
+    };
+    expect(archivedBody.archive).toBe("archived");
+    expect(archivedBody.features.some((f) => f.id === archivedId && f.archived)).toBe(true);
+    expect(archivedBody.features.some((f) => f.id === activeId)).toBe(false);
+
+    const listAll = await app.inject({ method: "GET", url: "/api/v1/features?archive=all" });
+    expect(listAll.statusCode).toBe(200);
+    const allBody = JSON.parse(listAll.body) as {
+      archive: string;
+      features: { id: string; archived: boolean; archivedAt?: string }[];
+    };
+    expect(allBody.archive).toBe("all");
+    expect(allBody.features.some((f) => f.id === activeId && !f.archived)).toBe(true);
+    expect(
+      allBody.features.some(
+        (f) => f.id === archivedId && f.archived && typeof f.archivedAt === "string"
+      )
+    ).toBe(true);
+
+    const invalid = await app.inject({ method: "GET", url: "/api/v1/features?archive=bogus" });
+    expect(invalid.statusCode).toBe(400);
+    expect((JSON.parse(invalid.body) as { error: string }).error).toBe("invalid_query");
+
+    await app.close();
+  });
+
   it("feature start calls Cursor Cloud API when cursorCloudAgent configured", async () => {
     process.env.CURSOR_API_KEY = "test-key";
     vi.stubGlobal(
