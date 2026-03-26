@@ -318,6 +318,117 @@ tr:focus-within {
   padding: 0.85rem 1rem;
 }
 
+.office-stage {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+}
+
+.office-stage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.office-stage-head .subsection-title {
+  margin: 0;
+}
+
+.office-stage-head .muted-sm {
+  margin: 0;
+}
+
+.office-stage-track {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    rgba(139, 146, 165, 0.14) 0%,
+    rgba(125, 211, 252, 0.07) 40%,
+    rgba(110, 231, 183, 0.08) 75%,
+    rgba(110, 231, 183, 0.14) 100%
+  );
+  overflow: hidden;
+}
+
+.office-zone-label {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  font-size: 0.64rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.office-zone-desk {
+  left: 6%;
+}
+
+.office-zone-merge {
+  left: 92%;
+}
+
+.office-zone-task {
+  opacity: 0.88;
+}
+
+.office-figure {
+  position: absolute;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 146, 165, 0.4);
+  background: rgba(12, 13, 16, 0.86);
+  max-width: 78%;
+  will-change: transform;
+}
+
+.office-figure-chip {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.office-figure-status {
+  font-size: 0.68rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-figure.role-auditor {
+  border-color: rgba(125, 211, 252, 0.45);
+}
+
+.office-figure.state-working {
+  border-color: rgba(110, 231, 183, 0.55);
+}
+
+.office-figure.state-walking {
+  border-color: rgba(125, 211, 252, 0.6);
+}
+
+.office-figure.state-done {
+  border-color: rgba(110, 231, 183, 0.5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .office-figure {
+    transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-color 260ms ease;
+  }
+}
+
 .feature-now-step {
   margin-bottom: 0.75rem;
 }
@@ -871,6 +982,10 @@ a.btn-primary {
 @media (prefers-reduced-motion: reduce) {
   .live-dot.on {
     box-shadow: none;
+  }
+
+  .office-figure {
+    transition: none;
   }
 
   .step-card {
