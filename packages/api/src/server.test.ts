@@ -562,4 +562,98 @@ featureWorktree:
     expect(globalThis.fetch).toHaveBeenCalled();
     await app.close();
   });
+
+  it("persists per-task integration evidence metadata", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-tasks-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: { title: "Task evidence", status: "ready", steps: [{ title: "S1" }] },
+    });
+    const { id: featureId } = JSON.parse(create.body) as { id: string };
+
+    const seeded = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${featureId}/tasks`,
+      payload: {
+        tasks: [{ title: "Implement integration evidence persistence", summary: "Task summary" }],
+      },
+    });
+    expect(seeded.statusCode).toBe(200);
+    const seededBody = JSON.parse(seeded.body) as {
+      tasks: Array<{
+        id: string;
+        integrationResult: string;
+        integrationReason?: string;
+        integrationDetail?: string;
+        integrationRecordedAt?: string;
+      }>;
+    };
+    expect(seededBody.tasks).toHaveLength(1);
+    expect(seededBody.tasks[0].integrationResult).toBe("pending");
+    expect(seededBody.tasks[0].integrationReason).toBe("task_seeded");
+    expect(seededBody.tasks[0].integrationRecordedAt).toBeTruthy();
+
+    const taskId = seededBody.tasks[0].id;
+    const integrationRecordedAt = new Date().toISOString();
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${featureId}/tasks/${taskId}`,
+      payload: {
+        status: "done",
+        integrationResult: "integrated_completed",
+        integrationReason: "merged_into_integration_branch",
+        integrationDetail: "Merged origin/task-branch into orch-feature-int-123.",
+        integrationRecordedAt,
+      },
+    });
+    expect(patched.statusCode).toBe(200);
+    const patchedBody = JSON.parse(patched.body) as {
+      integrationResult: string;
+      integrationReason?: string;
+      integrationDetail?: string;
+      integrationRecordedAt?: string;
+    };
+    expect(patchedBody.integrationResult).toBe("integrated_completed");
+    expect(patchedBody.integrationReason).toBe("merged_into_integration_branch");
+    expect(patchedBody.integrationDetail).toContain("Merged origin/task-branch");
+    expect(patchedBody.integrationRecordedAt).toBe(integrationRecordedAt);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: `/api/v1/features/${featureId}/tasks`,
+    });
+    expect(listed.statusCode).toBe(200);
+    const listedBody = JSON.parse(listed.body) as {
+      tasks: Array<{
+        id: string;
+        status: string;
+        integrationResult: string;
+        integrationReason?: string;
+        integrationDetail?: string;
+        integrationRecordedAt?: string;
+      }>;
+    };
+    expect(listedBody.tasks).toHaveLength(1);
+    expect(listedBody.tasks[0]).toMatchObject({
+      id: taskId,
+      status: "done",
+      integrationResult: "integrated_completed",
+      integrationReason: "merged_into_integration_branch",
+      integrationDetail: "Merged origin/task-branch into orch-feature-int-123.",
+      integrationRecordedAt,
+    });
+
+    await app.close();
+  });
 });
