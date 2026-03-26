@@ -33,6 +33,8 @@ import {
   mergeFeatureLinks,
   startFeature,
   cancelFeature,
+  archiveFeature,
+  unarchiveFeature,
   listSteps,
   replaceSteps,
   patchStep,
@@ -190,6 +192,7 @@ function featureToJSON(r: FeatureRun) {
     risks: r.risks,
     dependencies: r.dependencies,
     links: r.linksJson ? JSON.parse(r.linksJson) : undefined,
+    isArchived: r.archived,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -830,6 +833,32 @@ export async function buildServer(opts: ServerOptions) {
           return;
         }
         reply.code(400).send({ error: "cannot_cancel", status: cur.status });
+        return;
+      }
+      emitOrchestratorEvent({ type: "feature_updated", featureId: req.params.id });
+      return featureToJSON(updated);
+    }
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/v1/features/:id/archive",
+    async (req, reply) => {
+      const updated = archiveFeature(db, req.params.id);
+      if (!updated) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+      emitOrchestratorEvent({ type: "feature_updated", featureId: req.params.id });
+      return featureToJSON(updated);
+    }
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/v1/features/:id/unarchive",
+    async (req, reply) => {
+      const updated = unarchiveFeature(db, req.params.id);
+      if (!updated) {
+        reply.code(404).send({ error: "not_found" });
         return;
       }
       emitOrchestratorEvent({ type: "feature_updated", featureId: req.params.id });

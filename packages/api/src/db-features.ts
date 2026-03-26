@@ -17,20 +17,24 @@ import {
   canCancelFeature,
 } from "@orch-os/core";
 
-export function rowToFeature(row: Record<string, unknown>): FeatureRun {
+export type FeatureRunRecord = FeatureRun;
+
+export function rowToFeature(row: Record<string, unknown>): FeatureRunRecord {
   const archivedRaw = row.archived;
-  const archived =
+  const archivedFromCol =
     archivedRaw === 1 ||
     archivedRaw === "1" ||
     archivedRaw === true ||
     archivedRaw === "true";
+  const archivedAt = row.archived_at ? String(row.archived_at) : undefined;
+  const archived = archivedFromCol || Boolean(archivedAt);
   return {
     id: String(row.id),
     title: String(row.title),
     summary: row.summary ? String(row.summary) : undefined,
     status: row.status as FeatureStatus,
     archived,
-    archivedAt: row.archived_at ? String(row.archived_at) : undefined,
+    archivedAt,
     risks: row.risks ? String(row.risks) : undefined,
     dependencies: row.dependencies ? String(row.dependencies) : undefined,
     linksJson: row.links_json ? String(row.links_json) : undefined,
@@ -95,12 +99,11 @@ function rowToFeatureTask(row: Record<string, unknown>): FeatureTaskRecord {
   };
 }
 
-export function listFeatures(db: Database.Database): FeatureRun[] {
+const FEATURE_RUN_SELECT = `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at`;
+
+export function listFeatures(db: Database.Database): FeatureRunRecord[] {
   const rows = db
-    .prepare(
-      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
-       FROM feature_runs ORDER BY updated_at DESC`
-    )
+    .prepare(`${FEATURE_RUN_SELECT} FROM feature_runs ORDER BY updated_at DESC`)
     .all() as Record<string, unknown>[];
   return rows.map(rowToFeature);
 }
@@ -112,8 +115,7 @@ export function listFeaturesByArchive(
   if (archiveFilter === "archived") {
     const rows = db
       .prepare(
-        `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
-         FROM feature_runs WHERE archived = 1 ORDER BY updated_at DESC`
+        `${FEATURE_RUN_SELECT} FROM feature_runs WHERE archived = 1 ORDER BY updated_at DESC`
       )
       .all() as Record<string, unknown>[];
     return rows.map(rowToFeature);
@@ -121,27 +123,20 @@ export function listFeaturesByArchive(
   if (archiveFilter === "active") {
     const rows = db
       .prepare(
-        `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
-         FROM feature_runs WHERE archived = 0 ORDER BY updated_at DESC`
+        `${FEATURE_RUN_SELECT} FROM feature_runs WHERE archived = 0 ORDER BY updated_at DESC`
       )
       .all() as Record<string, unknown>[];
     return rows.map(rowToFeature);
   }
   const rows = db
-    .prepare(
-      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
-       FROM feature_runs ORDER BY updated_at DESC`
-    )
+    .prepare(`${FEATURE_RUN_SELECT} FROM feature_runs ORDER BY updated_at DESC`)
     .all() as Record<string, unknown>[];
   return rows.map(rowToFeature);
 }
 
-export function getFeature(db: Database.Database, id: string): FeatureRun | undefined {
+export function getFeature(db: Database.Database, id: string): FeatureRunRecord | undefined {
   const row = db
-    .prepare(
-      `SELECT id, title, summary, status, archived, archived_at, risks, dependencies, links_json, created_at, updated_at
-       FROM feature_runs WHERE id = ?`
-    )
+    .prepare(`${FEATURE_RUN_SELECT} FROM feature_runs WHERE id = ?`)
     .get(id) as Record<string, unknown> | undefined;
   return row ? rowToFeature(row) : undefined;
 }
@@ -149,7 +144,7 @@ export function getFeature(db: Database.Database, id: string): FeatureRun | unde
 export function createFeature(
   db: Database.Database,
   body: CreateFeatureBody
-): { run: FeatureRun; steps: FeatureStep[] } {
+): { run: FeatureRunRecord; steps: FeatureStep[] } {
   const now = new Date().toISOString();
   const id = nanoid(12);
   const status = body.status ?? "draft";
@@ -199,7 +194,7 @@ export function patchFeature(
   db: Database.Database,
   id: string,
   patch: PatchFeatureBody
-): FeatureRun | undefined {
+): FeatureRunRecord | undefined {
   const existing = getFeature(db, id);
   if (!existing) return undefined;
   const now = new Date().toISOString();
@@ -237,7 +232,7 @@ export function mergeFeatureLinks(
   db: Database.Database,
   id: string,
   partial: Record<string, unknown>
-): FeatureRun | undefined {
+): FeatureRunRecord | undefined {
   const existing = getFeature(db, id);
   if (!existing) return undefined;
   const now = new Date().toISOString();
@@ -253,7 +248,7 @@ export function mergeFeatureLinks(
   return getFeature(db, id);
 }
 
-export function startFeature(db: Database.Database, id: string): FeatureRun | undefined {
+export function startFeature(db: Database.Database, id: string): FeatureRunRecord | undefined {
   const existing = getFeature(db, id);
   if (!existing) return undefined;
   if (!canStartFeature(existing.status)) return undefined;
@@ -276,7 +271,7 @@ export function startFeature(db: Database.Database, id: string): FeatureRun | un
   return getFeature(db, id);
 }
 
-export function cancelFeature(db: Database.Database, id: string): FeatureRun | undefined {
+export function cancelFeature(db: Database.Database, id: string): FeatureRunRecord | undefined {
   const existing = getFeature(db, id);
   if (!existing) return undefined;
   if (!canCancelFeature(existing.status)) return undefined;
@@ -285,6 +280,32 @@ export function cancelFeature(db: Database.Database, id: string): FeatureRun | u
     now,
     id
   );
+  return getFeature(db, id);
+}
+
+export function archiveFeature(
+  db: Database.Database,
+  id: string
+): FeatureRunRecord | undefined {
+  const existing = getFeature(db, id);
+  if (!existing) return undefined;
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE feature_runs SET archived = 1, archived_at = ?, updated_at = ? WHERE id = ?`
+  ).run(now, now, id);
+  return getFeature(db, id);
+}
+
+export function unarchiveFeature(
+  db: Database.Database,
+  id: string
+): FeatureRunRecord | undefined {
+  const existing = getFeature(db, id);
+  if (!existing) return undefined;
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE feature_runs SET archived = 0, archived_at = NULL, updated_at = ? WHERE id = ?`
+  ).run(now, id);
   return getFeature(db, id);
 }
 

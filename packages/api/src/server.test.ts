@@ -402,13 +402,13 @@ autoCursorCloudAgentOnStart: false
       url: "/api/v1/features?archive=archived",
     });
     expect(listArchived.statusCode).toBe(200);
-    const archivedBody = JSON.parse(listArchived.body) as {
+    const archivedListBody = JSON.parse(listArchived.body) as {
       archive: string;
       features: { id: string; archived: boolean; archivedAt?: string }[];
     };
-    expect(archivedBody.archive).toBe("archived");
-    expect(archivedBody.features.some((f) => f.id === archivedId && f.archived)).toBe(true);
-    expect(archivedBody.features.some((f) => f.id === activeId)).toBe(false);
+    expect(archivedListBody.archive).toBe("archived");
+    expect(archivedListBody.features.some((f) => f.id === archivedId && f.archived)).toBe(true);
+    expect(archivedListBody.features.some((f) => f.id === activeId)).toBe(false);
 
     const listAll = await app.inject({ method: "GET", url: "/api/v1/features?archive=all" });
     expect(listAll.statusCode).toBe(200);
@@ -427,6 +427,79 @@ autoCursorCloudAgentOnStart: false
     const invalid = await app.inject({ method: "GET", url: "/api/v1/features?archive=bogus" });
     expect(invalid.statusCode).toBe(400);
     expect((JSON.parse(invalid.body) as { error: string }).error).toBe("invalid_query");
+
+    await app.close();
+  });
+
+  it("archives and unarchives features and exposes archive fields", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-archive-actions-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: {
+        title: "Archive test",
+        status: "ready",
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const created = JSON.parse(create.body) as {
+      id: string;
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(created.archivedAt).toBeUndefined();
+    expect(created.isArchived).toBe(false);
+
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${created.id}/archive`,
+    });
+    expect(archived.statusCode).toBe(200);
+    const archivedRespBody = JSON.parse(archived.body) as {
+      id: string;
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(archivedRespBody.id).toBe(created.id);
+    expect(archivedRespBody.archivedAt).toBeTruthy();
+    expect(archivedRespBody.isArchived).toBe(true);
+
+    const detail = await app.inject({ method: "GET", url: `/api/v1/features/${created.id}` });
+    expect(detail.statusCode).toBe(200);
+    const detailBody = JSON.parse(detail.body) as {
+      feature: { archivedAt?: string; isArchived: boolean };
+    };
+    expect(detailBody.feature.archivedAt).toBeTruthy();
+    expect(detailBody.feature.isArchived).toBe(true);
+
+    const list = await app.inject({ method: "GET", url: "/api/v1/features" });
+    expect(list.statusCode).toBe(200);
+    const listBody = JSON.parse(list.body) as {
+      features: Array<{ id: string; archivedAt?: string; isArchived: boolean }>;
+    };
+    const listItem = listBody.features.find((f) => f.id === created.id);
+    expect(listItem).toBeUndefined();
+
+    const unarchived = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${created.id}/unarchive`,
+    });
+    expect(unarchived.statusCode).toBe(200);
+    const unarchivedBody = JSON.parse(unarchived.body) as {
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(unarchivedBody.archivedAt).toBeUndefined();
+    expect(unarchivedBody.isArchived).toBe(false);
 
     await app.close();
   });
