@@ -4,9 +4,11 @@ import {
   deriveDeskState,
   extractCursorAgentId,
   filterAndReverseActivity,
+  isSharedOfficeVisibleRole,
   mapFigureStateToDeskState,
   sortStepsByOrdinal,
   toHumanStatusLabel,
+  validateReviewerTesterVisibility,
 } from "./feature-view-utils";
 
 describe("feature-view-utils", () => {
@@ -35,6 +37,29 @@ describe("feature-view-utils", () => {
     expect(extractCursorAgentId("https://cursor.com/team/demo/agent/agent_789XYZ?tab=activity")).toBe(
       "agent_789XYZ"
     );
+  });
+
+  it("accepts reviewer/tester as shared-office visible roles", () => {
+    expect(isSharedOfficeVisibleRole("agent")).toBe(true);
+    expect(isSharedOfficeVisibleRole("reviewer")).toBe(true);
+    expect(isSharedOfficeVisibleRole("tester")).toBe(true);
+    expect(isSharedOfficeVisibleRole("auditor")).toBe(true);
+    expect(isSharedOfficeVisibleRole("observer")).toBe(false);
+  });
+
+  it("validates reviewer and tester visibility from role checks", () => {
+    expect(validateReviewerTesterVisibility(["agent", "reviewer"])).toEqual({
+      reviewerVisible: true,
+      testerVisible: false,
+    });
+    expect(validateReviewerTesterVisibility(["tester", "auditor"])).toEqual({
+      reviewerVisible: false,
+      testerVisible: true,
+    });
+    expect(validateReviewerTesterVisibility(["agent", "reviewer", "tester"])).toEqual({
+      reviewerVisible: true,
+      testerVisible: true,
+    });
   });
 
   it("humanizes common activity labels", () => {
