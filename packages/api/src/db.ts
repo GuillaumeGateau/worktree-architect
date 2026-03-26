@@ -35,6 +35,7 @@ export function openDb(sqlitePath: string): Database.Database {
       risks TEXT,
       dependencies TEXT,
       links_json TEXT,
+      archived_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -76,6 +77,13 @@ export function openDb(sqlitePath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_activity_feature ON activity_events(feature_id);
   `);
+  // Forward-compatible migration for existing databases created before archive support.
+  const featureRunColumns = db.prepare(`PRAGMA table_info(feature_runs)`).all() as Array<{
+    name: string;
+  }>;
+  if (!featureRunColumns.some((c) => c.name === "archived_at")) {
+    db.exec(`ALTER TABLE feature_runs ADD COLUMN archived_at TEXT`);
+  }
   return db;
 }
 

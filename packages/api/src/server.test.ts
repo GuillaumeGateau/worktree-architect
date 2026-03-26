@@ -352,6 +352,80 @@ autoCursorCloudAgentOnStart: false
     await app.close();
   });
 
+  it("archives and unarchives features and exposes archive fields", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: {
+        title: "Archive test",
+        status: "ready",
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const created = JSON.parse(create.body) as {
+      id: string;
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(created.archivedAt).toBeUndefined();
+    expect(created.isArchived).toBe(false);
+
+    const archived = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${created.id}/archive`,
+    });
+    expect(archived.statusCode).toBe(200);
+    const archivedBody = JSON.parse(archived.body) as {
+      id: string;
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(archivedBody.id).toBe(created.id);
+    expect(archivedBody.archivedAt).toBeTruthy();
+    expect(archivedBody.isArchived).toBe(true);
+
+    const detail = await app.inject({ method: "GET", url: `/api/v1/features/${created.id}` });
+    expect(detail.statusCode).toBe(200);
+    const detailBody = JSON.parse(detail.body) as {
+      feature: { archivedAt?: string; isArchived: boolean };
+    };
+    expect(detailBody.feature.archivedAt).toBeTruthy();
+    expect(detailBody.feature.isArchived).toBe(true);
+
+    const list = await app.inject({ method: "GET", url: "/api/v1/features" });
+    expect(list.statusCode).toBe(200);
+    const listBody = JSON.parse(list.body) as {
+      features: Array<{ id: string; archivedAt?: string; isArchived: boolean }>;
+    };
+    const listItem = listBody.features.find((f) => f.id === created.id);
+    expect(listItem?.archivedAt).toBeTruthy();
+    expect(listItem?.isArchived).toBe(true);
+
+    const unarchived = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${created.id}/unarchive`,
+    });
+    expect(unarchived.statusCode).toBe(200);
+    const unarchivedBody = JSON.parse(unarchived.body) as {
+      archivedAt?: string;
+      isArchived: boolean;
+    };
+    expect(unarchivedBody.archivedAt).toBeUndefined();
+    expect(unarchivedBody.isArchived).toBe(false);
+
+    await app.close();
+  });
+
   it("feature start calls Cursor Cloud API when cursorCloudAgent configured", async () => {
     process.env.CURSOR_API_KEY = "test-key";
     vi.stubGlobal(
