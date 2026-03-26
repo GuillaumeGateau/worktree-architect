@@ -92,6 +92,7 @@ export function loadOrchestratorConfig(cwd: string): OrchestratorYamlConfig {
         sqlitePath: str(parsed.sqlitePath) ?? defaultConfig.sqlitePath,
         statusMdPath: str(parsed.statusMdPath) ?? defaultConfig.statusMdPath,
         autoCursorCloudAgentOnStart: parsed.autoCursorCloudAgentOnStart !== false,
+        taskEngine: parsed.taskEngine !== false,
         cursorCloudAgent: parseCursorCloudAgent(parsed.cursorCloudAgent),
         featureWorktree: parseFeatureWorktree(parsed.featureWorktree),
         featureStartCommand: parseFeatureStartCommand(parsed.featureStartCommand),

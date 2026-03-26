@@ -380,6 +380,7 @@ autoCursorCloudAgentOnStart: false
       `sqlitePath: ".orchestrator/test.db"
 statusMdPath: ".orchestrator/STATUS.md"
 autoCursorCloudAgentOnStart: false
+taskEngine: false
 cursorCloudAgent:
   enabled: true
   repository: "https://github.com/example/repo"
@@ -533,6 +534,7 @@ featureWorktree:
       join(dir, "orchestrator.config.yaml"),
       `sqlitePath: ".orchestrator/test.db"
 statusMdPath: ".orchestrator/STATUS.md"
+taskEngine: false
 featureWorktree:
   enabled: false
   spawnDefaultHook: false
