@@ -13,6 +13,7 @@ import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import {
   countRunningCloudAgents,
   deriveAgentStageState,
+  deriveDeskState,
   deriveSceneRoleStatusLines,
   filterAndReverseActivity,
   motionZoneForFigure,
@@ -20,6 +21,8 @@ import {
 } from "./feature-view-utils";
 import type { AgentStageFigure, AgentStageMotionZone } from "./feature-view-utils";
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
+import { FooA } from "./FooA";
+import { FooB } from "./FooB";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 const COUNTER_MISMATCH_PERSIST_MS = 10000;
@@ -171,6 +174,7 @@ export function FeaturesPanel(props: {
     [sortedSteps]
   );
 
+  const deskState = useMemo(() => deriveDeskState(activity, sortedSteps), [activity, sortedSteps]);
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
   const deskFigures = useMemo(
     () => deriveAgentStageState(activity, sortedSteps).figures,
@@ -311,6 +315,7 @@ export function FeaturesPanel(props: {
     <div className="features-layout">
       <div className="features-list-col">
         <h2 className="section-title">Feature runs</h2>
+        <p className="muted-sm">Desk map: {FooA(deskState)}</p>
         {featuresQ.error && (
           <div className="error-banner" role="alert">
             Could not load features: {(featuresQ.error as Error).message}
@@ -344,6 +349,9 @@ export function FeaturesPanel(props: {
       </div>
 
       <div className="features-detail-col">
+        <div className="muted-sm" data-testid="foo-b-marker">
+          {FooB(deskState)}
+        </div>
         {!selectedId ? (
           <div className="table-wrap empty">Select a feature run to see the plan and activity.</div>
         ) : detailQ.isLoading ? (

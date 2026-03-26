@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import type { JobEnvelope, JobStatus, FeatureRun, FeatureStep, ActivityEvent } from "@orch-os/core";
 import {
   canTransition,
+  JobStatusSchema,
   CreateFeatureBodySchema,
   PatchFeatureBodySchema,
   AppendActivityBodySchema,
@@ -64,6 +65,117 @@ export type ServerOptions = {
   apiKey?: string;
   config?: OrchestratorYamlConfig;
 };
+
+type CreateJobBody = {
+  contractVersion?: number;
+  role?: string;
+  payload?: Record<string, unknown>;
+  worktreePath?: string;
+  branch?: string;
+};
+
+type PatchJobBody = Partial<{
+  status: JobStatus;
+  blockedReason: string;
+  workerId: string;
+  role: string;
+  worktreePath: string;
+  branch: string;
+  payload: Record<string, unknown>;
+}>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateCreateJobBody(body: unknown): { ok: true; data: CreateJobBody } | { ok: false; message: string } {
+  if (!isRecord(body)) return { ok: false, message: "body must be an object" };
+  const out: CreateJobBody = {};
+
+  if (body.contractVersion !== undefined) {
+    if (!Number.isInteger(body.contractVersion) || Number(body.contractVersion) < 0) {
+      return { ok: false, message: "contractVersion must be a non-negative integer" };
+    }
+    out.contractVersion = Number(body.contractVersion);
+  }
+  if (body.role !== undefined) {
+    if (typeof body.role !== "string" || body.role.trim().length === 0) {
+      return { ok: false, message: "role must be a non-empty string" };
+    }
+    out.role = body.role;
+  }
+  if (body.worktreePath !== undefined) {
+    if (typeof body.worktreePath !== "string" || body.worktreePath.trim().length === 0) {
+      return { ok: false, message: "worktreePath must be a non-empty string" };
+    }
+    out.worktreePath = body.worktreePath;
+  }
+  if (body.branch !== undefined) {
+    if (typeof body.branch !== "string" || body.branch.trim().length === 0) {
+      return { ok: false, message: "branch must be a non-empty string" };
+    }
+    out.branch = body.branch;
+  }
+  if (body.payload !== undefined) {
+    if (!isRecord(body.payload)) {
+      return { ok: false, message: "payload must be an object" };
+    }
+    out.payload = body.payload;
+  }
+
+  return { ok: true, data: out };
+}
+
+function validatePatchJobBody(body: unknown): { ok: true; data: PatchJobBody } | { ok: false; message: string } {
+  if (!isRecord(body)) return { ok: false, message: "body must be an object" };
+  const out: PatchJobBody = {};
+
+  if (body.status !== undefined) {
+    const parsedStatus = JobStatusSchema.safeParse(body.status);
+    if (!parsedStatus.success) {
+      return { ok: false, message: "status must be one of queued|claimed|running|succeeded|failed|blocked" };
+    }
+    out.status = parsedStatus.data;
+  }
+  if (body.blockedReason !== undefined) {
+    if (typeof body.blockedReason !== "string") {
+      return { ok: false, message: "blockedReason must be a string" };
+    }
+    out.blockedReason = body.blockedReason;
+  }
+  if (body.workerId !== undefined) {
+    if (typeof body.workerId !== "string" || body.workerId.trim().length === 0) {
+      return { ok: false, message: "workerId must be a non-empty string" };
+    }
+    out.workerId = body.workerId;
+  }
+  if (body.role !== undefined) {
+    if (typeof body.role !== "string" || body.role.trim().length === 0) {
+      return { ok: false, message: "role must be a non-empty string" };
+    }
+    out.role = body.role;
+  }
+  if (body.worktreePath !== undefined) {
+    if (typeof body.worktreePath !== "string" || body.worktreePath.trim().length === 0) {
+      return { ok: false, message: "worktreePath must be a non-empty string" };
+    }
+    out.worktreePath = body.worktreePath;
+  }
+  if (body.branch !== undefined) {
+    if (typeof body.branch !== "string" || body.branch.trim().length === 0) {
+      return { ok: false, message: "branch must be a non-empty string" };
+    }
+    out.branch = body.branch;
+  }
+  if (body.payload !== undefined) {
+    if (!isRecord(body.payload)) {
+      return { ok: false, message: "payload must be an object" };
+    }
+    out.payload = body.payload;
+  }
+
+  return { ok: true, data: out };
+}
 
 function featureToJSON(r: FeatureRun) {
   return {
@@ -187,25 +299,22 @@ export async function buildServer(opts: ServerOptions) {
     return job;
   });
 
-  app.post<{
-    Body: {
-      contractVersion?: number;
-      role?: string;
-      payload?: Record<string, unknown>;
-      worktreePath?: string;
-      branch?: string;
-    };
-  }>("/api/v1/jobs", async (req) => {
+  app.post<{ Body: unknown }>("/api/v1/jobs", async (req, reply) => {
+    const parsed = validateCreateJobBody(req.body);
+    if (!parsed.ok) {
+      reply.code(400).send({ error: "invalid_body", message: parsed.message });
+      return;
+    }
     const now = new Date().toISOString();
     const id = nanoid(12);
     const job: JobEnvelope = {
       id,
-      contractVersion: req.body.contractVersion ?? 1,
-      role: req.body.role,
+      contractVersion: parsed.data.contractVersion ?? 1,
+      role: parsed.data.role,
       status: "queued",
-      worktreePath: req.body.worktreePath,
-      branch: req.body.branch,
-      payload: req.body.payload,
+      worktreePath: parsed.data.worktreePath,
+      branch: parsed.data.branch,
+      payload: parsed.data.payload,
       createdAt: now,
       updatedAt: now,
     };
@@ -217,22 +326,19 @@ export async function buildServer(opts: ServerOptions) {
 
   app.patch<{
     Params: { id: string };
-    Body: Partial<{
-      status: JobStatus;
-      blockedReason: string;
-      workerId: string;
-      role: string;
-      worktreePath: string;
-      branch: string;
-      payload: Record<string, unknown>;
-    }>;
+    Body: unknown;
   }>("/api/v1/jobs/:id", async (req, reply) => {
     const existing = getJob(db, req.params.id);
     if (!existing) {
       reply.code(404).send({ error: "not_found" });
       return;
     }
-    const nextStatus = req.body.status;
+    const parsed = validatePatchJobBody(req.body);
+    if (!parsed.ok) {
+      reply.code(400).send({ error: "invalid_body", message: parsed.message });
+      return;
+    }
+    const nextStatus = parsed.data.status;
     if (nextStatus && !canTransition(existing.status, nextStatus)) {
       reply.code(400).send({
         error: "invalid_transition",
@@ -242,7 +348,7 @@ export async function buildServer(opts: ServerOptions) {
       return;
     }
     const now = new Date().toISOString();
-    const updated = updateJobStatus(db, req.params.id, { ...req.body }, now);
+    const updated = updateJobStatus(db, req.params.id, parsed.data, now);
     emitOrchestratorEvent({ type: "job_updated", jobId: req.params.id });
     refreshStatusMd();
     return updated;

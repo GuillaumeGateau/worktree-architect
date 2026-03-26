@@ -5,12 +5,16 @@ import {
   deriveAgentStageState,
   deriveOfficeSceneState,
   deriveSceneRoleStatusLines,
+  deriveDeskState,
   extractCursorAgentId,
   filterAndReverseActivity,
+  isSharedOfficeVisibleRole,
+  mapFigureStateToDeskState,
   motionZoneForFigure,
   normalizeOfficeLifecycleState,
   sortStepsByOrdinal,
   toHumanStatusLabel,
+  validateReviewerTesterVisibility,
 } from "./feature-view-utils";
 
 describe("feature-view-utils", () => {
@@ -39,6 +43,29 @@ describe("feature-view-utils", () => {
     expect(extractCursorAgentId("https://cursor.com/team/demo/agent/agent_789XYZ?tab=activity")).toBe(
       "agent_789XYZ"
     );
+  });
+
+  it("accepts reviewer/tester as shared-office visible roles", () => {
+    expect(isSharedOfficeVisibleRole("agent")).toBe(true);
+    expect(isSharedOfficeVisibleRole("reviewer")).toBe(true);
+    expect(isSharedOfficeVisibleRole("tester")).toBe(true);
+    expect(isSharedOfficeVisibleRole("auditor")).toBe(true);
+    expect(isSharedOfficeVisibleRole("observer")).toBe(false);
+  });
+
+  it("validates reviewer and tester visibility from role checks", () => {
+    expect(validateReviewerTesterVisibility(["agent", "reviewer"])).toEqual({
+      reviewerVisible: true,
+      testerVisible: false,
+    });
+    expect(validateReviewerTesterVisibility(["tester", "auditor"])).toEqual({
+      reviewerVisible: false,
+      testerVisible: true,
+    });
+    expect(validateReviewerTesterVisibility(["agent", "reviewer", "tester"])).toEqual({
+      reviewerVisible: true,
+      testerVisible: true,
+    });
   });
 
   it("humanizes common activity labels", () => {
@@ -456,5 +483,44 @@ describe("feature-view-utils", () => {
       ]
     );
     expect(countRunningCloudAgents(derived.figures)).toBe(1);
+  });
+
+  it("maps figure states to desk states", () => {
+    expect(mapFigureStateToDeskState("idle")).toBe("empty");
+    expect(mapFigureStateToDeskState("walking")).toBe("arriving");
+    expect(mapFigureStateToDeskState("working")).toBe("active");
+    expect(mapFigureStateToDeskState("done")).toBe("complete");
+  });
+
+  it("derives desk state and agent-to-desk mapping", () => {
+    const derived = deriveDeskState(
+      [
+        {
+          id: "a1",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [1] "Wire stage" — https://cursor.com/agents/agt_task1 (branch: orch-task)',
+          createdAt: "2026-03-25T11:00:00.000Z",
+        },
+        {
+          id: "a2",
+          kind: "tool",
+          message: "Running tests…",
+          stepId: "step-1",
+          createdAt: "2026-03-25T11:01:00.000Z",
+        },
+      ],
+      [{ id: "step-1", ordinal: 1 }]
+    );
+
+    expect(derived.desks).toEqual([
+      expect.objectContaining({
+        deskId: "desk-task-1",
+        figureId: "task-1",
+        deskState: "active",
+        agentId: "agt_task1",
+      }),
+    ]);
+    expect(derived.agentIdToDesk).toEqual({ agt_task1: "desk-task-1" });
   });
 });
