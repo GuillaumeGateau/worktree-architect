@@ -3,6 +3,7 @@ import {
   buildOfficeLayoutModel,
   deriveAgentStageState,
   deriveOfficeSceneState,
+  deriveSceneRoleStatusLines,
   extractCursorAgentId,
   filterAndReverseActivity,
   motionZoneForFigure,
@@ -342,5 +343,77 @@ describe("feature-view-utils", () => {
       currentZoneId: "desk-6",
       lifecycleState: "waiting",
     });
+  });
+
+  it("derives orchestrator blocked and reviewer active statuses", () => {
+    const lines = deriveSceneRoleStatusLines(
+      "executing",
+      [{ id: "s1", ordinal: 1, title: "Wire statuses", status: "blocked" }],
+      [
+        {
+          id: "a1",
+          kind: "merge",
+          message: "Merge auditor launched — https://cursor.com/agents/agt_auditor",
+          createdAt: "2026-03-25T12:00:00.000Z",
+        },
+      ]
+    );
+
+    expect(lines).toEqual([
+      {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "blocked",
+        detail: "Blocked on step 1: Wire statuses",
+      },
+      {
+        role: "reviewer",
+        label: "Reviewer",
+        state: "active",
+        detail: "Merge audit running",
+      },
+      {
+        role: "tester",
+        label: "Tester",
+        state: "waiting",
+        detail: "Waiting for reviewer signal",
+      },
+    ]);
+  });
+
+  it("derives tester active status from testing activity", () => {
+    const lines = deriveSceneRoleStatusLines(
+      "completed",
+      [{ id: "s1", ordinal: 1, title: "Ship", status: "done" }],
+      [
+        {
+          id: "a1",
+          kind: "tool",
+          message: "Running tests for reviewer handoff",
+          createdAt: "2026-03-25T12:01:00.000Z",
+        },
+      ]
+    );
+
+    expect(lines).toEqual([
+      {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "waiting",
+        detail: "Execution complete; waiting on reviewer/tester",
+      },
+      {
+        role: "reviewer",
+        label: "Reviewer",
+        state: "waiting",
+        detail: "Waiting to review the completed run",
+      },
+      {
+        role: "tester",
+        label: "Tester",
+        state: "active",
+        detail: "Running tests for reviewer handoff",
+      },
+    ]);
   });
 });

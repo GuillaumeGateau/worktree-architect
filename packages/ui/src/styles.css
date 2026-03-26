@@ -660,6 +660,62 @@ tr:focus-within {
   background: #cbd5e1;
 }
 
+.office-role-status {
+  margin-bottom: 1.25rem;
+}
+
+.office-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.office-role-row {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.office-role-row:last-child {
+  border-bottom: none;
+}
+
+.office-role-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.office-role-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge.office-role-state {
+  font-size: 0.66rem;
+}
+
+.badge.office-role-state-active {
+  background: #1a2530;
+  color: #7dd3fc;
+}
+
+.badge.office-role-state-blocked {
+  background: #2a1f28;
+  color: #e9a3ff;
+}
+
+.badge.office-role-state-waiting {
+  background: #252a30;
+  color: var(--muted);
+}
+
+.office-role-detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .main-tabs {
   display: flex;
   flex-wrap: wrap;
