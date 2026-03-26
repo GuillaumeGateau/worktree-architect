@@ -213,7 +213,12 @@ export function deriveSceneRoleStatusLines(
 
   const reviewerEvent = latestMatchingActivity(
     activity,
-    (ev) => ev.kind === "merge" || /merge auditor|review/i.test(ev.message)
+    (ev) => {
+      if (ev.kind === "merge") return true;
+      if (!/merge auditor|review/i.test(ev.message)) return false;
+      // Avoid classifying tester "reviewer handoff" messages as reviewer activity.
+      return !/\b(test|tests|tester|qa|verify|verification)\b/i.test(ev.message);
+    }
   );
   const reviewer: SceneRoleStatusLine = (() => {
     if (reviewerEvent) {
