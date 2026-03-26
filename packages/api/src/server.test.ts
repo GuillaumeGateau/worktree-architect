@@ -37,6 +37,66 @@ autoCursorCloudAgentOnStart: false
     await app.close();
   });
 
+  it("validates job role/status in agent flow", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/jobs",
+      payload: { role: "agent", contractVersion: 1 },
+    });
+    expect(created.statusCode).toBe(200);
+    const job = JSON.parse(created.body) as { id: string; role?: string; status: string };
+    expect(job.role).toBe("agent");
+    expect(job.status).toBe("queued");
+
+    const claimed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${job.id}`,
+      payload: { status: "claimed", role: "agent", workerId: "worker-1" },
+    });
+    expect(claimed.statusCode).toBe(200);
+    const claimedBody = JSON.parse(claimed.body) as { status: string; role?: string; workerId?: string };
+    expect(claimedBody.status).toBe("claimed");
+    expect(claimedBody.role).toBe("agent");
+    expect(claimedBody.workerId).toBe("worker-1");
+
+    const badStatus = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${job.id}`,
+      payload: { status: "done" },
+    });
+    expect(badStatus.statusCode).toBe(400);
+    expect((JSON.parse(badStatus.body) as { error: string }).error).toBe("invalid_body");
+
+    const badRoleOnCreate = await app.inject({
+      method: "POST",
+      url: "/api/v1/jobs",
+      payload: { role: "" },
+    });
+    expect(badRoleOnCreate.statusCode).toBe(400);
+    expect((JSON.parse(badRoleOnCreate.body) as { error: string }).error).toBe("invalid_body");
+
+    const badRoleOnPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${job.id}`,
+      payload: { role: "" },
+    });
+    expect(badRoleOnPatch.statusCode).toBe(400);
+    expect((JSON.parse(badRoleOnPatch.body) as { error: string }).error).toBe("invalid_body");
+
+    await app.close();
+  });
+
   it("feature create, detail, start, activity", async () => {
     dir = mkdtempSync(join(tmpdir(), "orch-api-"));
     writeFileSync(
