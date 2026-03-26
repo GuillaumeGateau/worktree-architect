@@ -14,7 +14,7 @@ export function filterAndReverseActivity<T extends { kind: string }>(
 }
 
 export type AgentStageFigureState = "idle" | "walking" | "working" | "done";
-export type AgentStageFigureRole = "agent" | "auditor";
+export type AgentStageFigureRole = "agent" | "reviewer" | "tester" | "auditor";
 
 export type AgentStageFigure = {
   figureId: string;
@@ -45,6 +45,38 @@ export type AgentStageDerivedState = {
   figures: AgentStageFigure[];
   agentIdToFigure: Record<string, string>;
 };
+
+const SHARED_OFFICE_VISIBLE_ROLES: AgentStageFigureRole[] = [
+  "agent",
+  "reviewer",
+  "tester",
+  "auditor",
+];
+
+/** Role checks for shared-office visibility. */
+export function isSharedOfficeVisibleRole(role: string): role is AgentStageFigureRole {
+  return SHARED_OFFICE_VISIBLE_ROLES.includes(role as AgentStageFigureRole);
+}
+
+export type ReviewerTesterVisibility = {
+  reviewerVisible: boolean;
+  testerVisible: boolean;
+};
+
+/**
+ * Validate reviewer and tester visibility from role membership.
+ * Used by smoke checks to ensure both lanes are represented.
+ */
+export function validateReviewerTesterVisibility(
+  roles: Iterable<string>
+): ReviewerTesterVisibility {
+  const seen = new Set<string>();
+  for (const role of roles) seen.add(role);
+  return {
+    reviewerVisible: seen.has("reviewer"),
+    testerVisible: seen.has("tester"),
+  };
+}
 
 export type DeskState = "empty" | "arriving" | "active" | "complete";
 
