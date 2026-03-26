@@ -1097,6 +1097,46 @@ tr:focus-within {
   font-size: 0.875rem;
 }
 
+.feature-list-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.feature-view-btn {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.feature-view-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: #f2f7ff;
+}
+
+.feature-view-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.feature-list-badges {
+  grid-column: 2;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 .feature-list-item .badge {
   grid-column: 2;
   align-self: start;
@@ -1155,7 +1195,8 @@ tr:focus-within {
 }
 
 .btn-primary,
-.btn-danger {
+.btn-danger,
+.btn-secondary {
   font-family: var(--font-sans);
   font-size: 0.8rem;
   font-weight: 600;
@@ -1192,8 +1233,19 @@ a.btn-primary {
   background: #ffdede;
 }
 
+.btn-secondary {
+  background: #eef2f8;
+  color: #51647f;
+  border-color: #c5d2e3;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e4ebf5;
+}
+
 .btn-primary:disabled,
-.btn-danger:disabled {
+.btn-danger:disabled,
+.btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1330,6 +1382,10 @@ a.btn-primary {
 .badge.feat-cancelled {
   background: #eef1f7;
   color: #66758c;
+}
+.badge.feat-archived {
+  background: #f3edf9;
+  color: #7b58a0;
 }
 
 .execution-log-section {

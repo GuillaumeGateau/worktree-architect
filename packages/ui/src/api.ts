@@ -1,4 +1,5 @@
 const base = "";
+export type FeatureListView = "active" | "archived";
 
 function featureApiError(resource: string, status: number): Error {
   if (status === 404) {
@@ -9,11 +10,29 @@ function featureApiError(resource: string, status: number): Error {
   return new Error(`${resource} ${status}`);
 }
 
-export async function fetchFeatures(): Promise<import("./types").FeatureRow[]> {
-  const r = await fetch(`${base}/api/v1/features`);
-  if (!r.ok) throw featureApiError("features", r.status);
+async function parseFeatureList(
+  r: Response
+): Promise<import("./types").FeatureRow[]> {
   const data = (await r.json()) as { features: import("./types").FeatureRow[] };
   return data.features;
+}
+
+export async function fetchFeatures(
+  view: FeatureListView = "active"
+): Promise<import("./types").FeatureRow[]> {
+  const q = new URLSearchParams({
+    archived: view === "archived" ? "only" : "exclude",
+  });
+
+  const preferred = await fetch(`${base}/api/v1/features?${q.toString()}`);
+  if (preferred.ok) return parseFeatureList(preferred);
+  if (![400, 404].includes(preferred.status)) {
+    throw featureApiError("features", preferred.status);
+  }
+
+  const fallback = await fetch(`${base}/api/v1/features`);
+  if (!fallback.ok) throw featureApiError("features", fallback.status);
+  return parseFeatureList(fallback);
 }
 
 export async function fetchFeatureDetail(
@@ -52,6 +71,27 @@ export async function postFeatureCancel(id: string): Promise<void> {
     const t = await r.text();
     throw new Error(t || `cancel ${r.status}`);
   }
+}
+
+async function postFeatureArchiveAction(
+  id: string,
+  action: "archive" | "unarchive"
+): Promise<void> {
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/${action}`, {
+    method: "POST",
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || `${action} ${r.status}`);
+  }
+}
+
+export async function postFeatureArchive(id: string): Promise<void> {
+  await postFeatureArchiveAction(id, "archive");
+}
+
+export async function postFeatureUnarchive(id: string): Promise<void> {
+  await postFeatureArchiveAction(id, "unarchive");
 }
 
 export async function fetchJobs(): Promise<import("./types").JobRow[]> {

@@ -6,8 +6,11 @@ import {
   fetchFeatureActivity,
   fetchFeatureDetail,
   fetchFeatures,
+  type FeatureListView,
+  postFeatureArchive,
   postFeatureCancel,
   postFeatureStart,
+  postFeatureUnarchive,
 } from "./api";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import {
@@ -82,6 +85,10 @@ function figureDisplayName(figure: AgentStageFigure): string {
   return "Task agent";
 }
 
+function motionZoneForFigure(figure: AgentStageFigure): string {
+  return figure.role === "auditor" ? "review" : "desk";
+}
+
 function toPercent(value: number, total: number): string {
   if (total <= 0) return "0%";
   return `${((value / total) * 100).toFixed(2)}%`;
@@ -127,6 +134,18 @@ function formatDetailsJson(details: Record<string, unknown> | undefined): string
   }
 }
 
+function isFeatureArchived(feature: FeatureRow | undefined): boolean {
+  if (!feature) return false;
+  if (feature.archived === true) return true;
+  if (typeof feature.archivedAt === "string" && feature.archivedAt.length > 0) return true;
+  const links = feature.links;
+  if (!links) return false;
+  return (
+    links.archived === true ||
+    (typeof links.archivedAt === "string" && links.archivedAt.length > 0)
+  );
+}
+
 export function FeaturesPanel(props: {
   live: boolean;
   selectedId: string | null;
@@ -137,10 +156,11 @@ export function FeaturesPanel(props: {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activityKind, setActivityKind] = useState<string>("all");
+  const [featureListView, setFeatureListView] = useState<FeatureListView>("active");
 
   const featuresQ = useQuery({
-    queryKey: ["features"],
-    queryFn: fetchFeatures,
+    queryKey: ["features", featureListView],
+    queryFn: () => fetchFeatures(featureListView),
     refetchInterval: props.live ? false : 8000,
   });
 
@@ -172,8 +192,22 @@ export function FeaturesPanel(props: {
     [qc]
   );
 
-  const features = (featuresQ.data as FeatureRow[] | undefined) ?? [];
+  const rawFeatures = (featuresQ.data as FeatureRow[] | undefined) ?? [];
   const activity = (activityQ.data as ActivityEventRow[] | undefined) ?? [];
+  const features = useMemo(
+    () =>
+      rawFeatures.filter((feature) =>
+        featureListView === "archived" ? isFeatureArchived(feature) : !isFeatureArchived(feature)
+      ),
+    [featureListView, rawFeatures]
+  );
+
+  useEffect(() => {
+    if (!selectedId || featuresQ.isLoading) return;
+    if (!features.some((feature) => feature.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [features, featuresQ.isLoading, selectedId, setSelectedId]);
 
   const filteredActivity = useMemo(
     () => filterAndReverseActivity(activity, activityKind),
@@ -192,20 +226,22 @@ export function FeaturesPanel(props: {
 
   const deskState = useMemo(() => deriveDeskState(activity, sortedSteps), [activity, sortedSteps]);
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
-  const stageState = useMemo(() => deriveAgentStageState(activity, sortedSteps), [activity, sortedSteps]);
-  const deskFigures = stageState.figures;
+  const deskFigures = useMemo(
+    () => deriveAgentStageState(activity, sortedSteps).figures,
+    [activity, sortedSteps]
+  );
   const figureById = useMemo(
     () => new Map(deskFigures.map((figure) => [figure.figureId, figure] as const)),
     [deskFigures]
   );
   const officeScene = useMemo(() => {
-    const deskCount = Math.max(sortedSteps.length, stageState.figures.length, 1);
+    const deskCount = Math.max(sortedSteps.length, deskFigures.length, 1);
     const deskColumns = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(deskCount))));
-    return deriveOfficeSceneState(stageState.figures, {
+    return deriveOfficeSceneState(deskFigures, {
       deskCount,
       deskColumns,
     });
-  }, [sortedSteps.length, stageState.figures]);
+  }, [deskFigures, sortedSteps.length]);
   const officeZoneById = useMemo(() => {
     const map = new Map<string, (typeof officeScene.layout.desks)[number] | typeof officeScene.layout.zones.hub>();
     for (const desk of officeScene.layout.desks) map.set(desk.id, desk);
@@ -221,6 +257,7 @@ export function FeaturesPanel(props: {
     }
     return set;
   }, [officeScene.placements]);
+  const officeFigures = officeScene.placements;
   const officeTrackHeight = Math.max(180, officeScene.layout.bounds.height);
   const sceneRoleStatus = useMemo(
     () => deriveSceneRoleStatusLines(detail?.feature.status, sortedSteps, activity),
@@ -306,9 +343,55 @@ export function FeaturesPanel(props: {
     }
   }, [invalidateFeatures, invalidateSelected, qc, selectedId]);
 
+  const runArchive = useCallback(async () => {
+    if (!selectedId) return;
+    setActionError(null);
+    setBusy(true);
+    try {
+      await postFeatureArchive(selectedId);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["feature", selectedId] }),
+        qc.refetchQueries({ queryKey: ["feature", selectedId, "activity"] }),
+      ]);
+      invalidateSelected(selectedId);
+      invalidateFeatures();
+      if (featureListView === "active") setSelectedId(null);
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [featureListView, invalidateFeatures, invalidateSelected, qc, selectedId, setSelectedId]);
+
+  const runUnarchive = useCallback(async () => {
+    if (!selectedId) return;
+    setActionError(null);
+    setBusy(true);
+    try {
+      await postFeatureUnarchive(selectedId);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["feature", selectedId] }),
+        qc.refetchQueries({ queryKey: ["feature", selectedId, "activity"] }),
+      ]);
+      invalidateSelected(selectedId);
+      invalidateFeatures();
+      if (featureListView === "archived") setSelectedId(null);
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [featureListView, invalidateFeatures, invalidateSelected, qc, selectedId, setSelectedId]);
+
   const st = detail?.feature.status as FeatureStatus | undefined;
   const canStart = st ? canStartFeature(st) : false;
   const canCancel = st ? canCancelFeature(st) : false;
+  const isArchived = isFeatureArchived(detail?.feature);
+  const canArchive =
+    Boolean(detail) &&
+    !isArchived &&
+    ["completed", "failed", "cancelled"].includes(detail.feature.status);
+  const canUnarchive = Boolean(detail) && isArchived;
   const agentUrl = detail ? cursorAgentUrl(detail.feature.links) : undefined;
   const agentStatus = detail ? cursorAgentStatus(detail.feature.links) : undefined;
   const startMode = detail ? featureStartMode(detail.feature.links) : undefined;
@@ -334,6 +417,24 @@ export function FeaturesPanel(props: {
     <div className="features-layout">
       <div className="features-list-col">
         <h2 className="section-title">Feature runs</h2>
+        <div className="feature-list-toolbar" role="tablist" aria-label="Feature run filters">
+          <button
+            type="button"
+            className={`feature-view-btn ${featureListView === "active" ? "active" : ""}`}
+            onClick={() => setFeatureListView("active")}
+            aria-selected={featureListView === "active"}
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            className={`feature-view-btn ${featureListView === "archived" ? "active" : ""}`}
+            onClick={() => setFeatureListView("archived")}
+            aria-selected={featureListView === "archived"}
+          >
+            Archived
+          </button>
+        </div>
         <p className="muted-sm">Desk map: {FooA(deskState)}</p>
         {featuresQ.error && (
           <div className="error-banner" role="alert">
@@ -342,9 +443,15 @@ export function FeaturesPanel(props: {
         )}
         {features.length === 0 && !featuresQ.isLoading ? (
           <div className="table-wrap empty">
-            No feature runs yet. Use{" "}
-            <code className="mono">orchestrator feature create</code> or{" "}
-            <code className="mono">/build-feature</code> from Cursor.
+            {featureListView === "active" ? (
+              <>
+                No active feature runs yet. Use{" "}
+                <code className="mono">orchestrator feature create</code> or{" "}
+                <code className="mono">/build-feature</code> from Cursor.
+              </>
+            ) : (
+              <>No archived feature runs.</>
+            )}
           </div>
         ) : (
           <ul className="feature-list" aria-label="Feature runs">
@@ -356,7 +463,10 @@ export function FeaturesPanel(props: {
                   onClick={() => setSelectedId(f.id)}
                 >
                   <span className="feature-list-title">{f.title}</span>
-                  <span className={featureBadgeClass(f.status)}>{f.status}</span>
+                  <span className="feature-list-badges">
+                    <span className={featureBadgeClass(f.status)}>{f.status}</span>
+                    {isFeatureArchived(f) ? <span className="badge feat-archived">archived</span> : null}
+                  </span>
                   <span className="feature-list-id mono" title={f.id}>
                     {f.id.slice(0, 10)}…
                   </span>
@@ -403,6 +513,7 @@ export function FeaturesPanel(props: {
                 <span className={featureBadgeClass(detail.feature.status)}>
                   {detail.feature.status}
                 </span>
+                {isArchived ? <span className="badge feat-archived">archived</span> : null}
                 {agentUrl ? (
                   <a
                     className="btn-primary"
@@ -431,6 +542,26 @@ export function FeaturesPanel(props: {
                     onClick={() => void runCancel()}
                   >
                     Cancel
+                  </button>
+                )}
+                {canArchive && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={busy}
+                    onClick={() => void runArchive()}
+                  >
+                    Archive
+                  </button>
+                )}
+                {canUnarchive && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={busy}
+                    onClick={() => void runUnarchive()}
+                  >
+                    Unarchive
                   </button>
                 )}
               </div>
@@ -650,12 +781,12 @@ export function FeaturesPanel(props: {
               <DeskAgentAvatars figures={deskFigures} />
             )}
 
-            {(detail.feature.status === "executing" || officeScene.placements.length > 0) && (
+            {(detail.feature.status === "executing" || officeFigures.length > 0) && (
               <section className="office-stage card" aria-label="Shared office movement">
                 <div className="office-stage-head">
                   <h3 className="subsection-title">Shared office</h3>
                   <p className="muted-sm">
-                    Agents move desk → task zone → merge, then return when complete.
+                    Agents leave their desk as work starts and return when complete.
                   </p>
                 </div>
                 <div className="office-stage-track" style={{ height: `${officeTrackHeight}px` }}>
@@ -742,6 +873,7 @@ export function FeaturesPanel(props: {
                         className={`office-figure role-${figure.role} state-${figureStateClassForLifecycle(
                           placement.lifecycleState
                         )}`}
+                        data-motion-zone={motionZoneForFigure(figure)}
                         style={{
                           left: toPercent(zone.center.x, officeScene.layout.bounds.width),
                           top: toPercent(zone.center.y, officeScene.layout.bounds.height),
