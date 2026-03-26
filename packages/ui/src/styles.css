@@ -1,13 +1,13 @@
 :root {
-  color-scheme: dark;
-  --bg: #0c0d10;
-  --surface: #14161c;
-  --border: #2a2e38;
-  --text: #e8eaef;
-  --muted: #8b92a5;
-  --accent: #6ee7b7;
-  --warn: #fbbf24;
-  --danger: #f87171;
+  color-scheme: light;
+  --bg: #f6efe3;
+  --surface: #fffaf2;
+  --border: #ddcfbd;
+  --text: #2f261c;
+  --muted: #7b6a58;
+  --accent: #2f9b7a;
+  --warn: #a16207;
+  --danger: #b8423a;
   --font-sans: "DM Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -20,8 +20,8 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-sans);
-  background: radial-gradient(1200px 600px at 10% -10%, #1a2332 0%, transparent 50%),
-    radial-gradient(800px 400px at 90% 0%, #13221f 0%, transparent 45%), var(--bg);
+  background: radial-gradient(1200px 600px at 10% -10%, #efe2cc 0%, transparent 52%),
+    radial-gradient(800px 400px at 90% 0%, #f4e3cf 0%, transparent 48%), var(--bg);
   color: var(--text);
 }
 
@@ -159,25 +159,25 @@ tr:focus-within {
 }
 
 .badge.queued {
-  background: #2d2a1f;
+  background: #f6ebd6;
   color: var(--warn);
 }
 .badge.claimed,
 .badge.running {
-  background: #1a2530;
-  color: #7dd3fc;
+  background: #e1edf8;
+  color: #1d5f91;
 }
 .badge.succeeded {
-  background: #14221c;
+  background: #dff3e9;
   color: var(--accent);
 }
 .badge.failed {
-  background: #2a1818;
+  background: #f9e2df;
   color: var(--danger);
 }
 .badge.blocked {
-  background: #2a1f28;
-  color: #e9a3ff;
+  background: #f2e5f6;
+  color: #8a3fa5;
 }
 
 .job-actions {
@@ -221,9 +221,9 @@ tr:focus-within {
 }
 
 .error-banner {
-  background: #2a1818;
+  background: #fdebe8;
   border: 1px solid var(--danger);
-  color: #fecaca;
+  color: #8f2f2a;
   padding: 0.75rem 1rem;
   border-radius: 8px;
   margin-bottom: 1rem;
@@ -231,8 +231,8 @@ tr:focus-within {
 }
 
 .execution-callout {
-  background: rgba(125, 211, 252, 0.08);
-  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(56, 139, 253, 0.1);
+  border: 1px solid rgba(56, 139, 253, 0.28);
   border-radius: 10px;
   padding: 0.85rem 1rem;
   margin-bottom: 1.25rem;
@@ -253,18 +253,18 @@ tr:focus-within {
 }
 
 .execution-callout-warn {
-  background: rgba(251, 191, 36, 0.08);
-  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.36);
 }
 
 .execution-callout-info {
-  background: rgba(52, 211, 153, 0.06);
-  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(47, 155, 122, 0.1);
+  border-color: rgba(47, 155, 122, 0.32);
 }
 
 .execution-callout-error {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(184, 66, 58, 0.1);
+  border-color: rgba(184, 66, 58, 0.34);
 }
 
 .execution-callout-sub {
@@ -650,53 +650,53 @@ a.btn-primary {
 }
 
 .badge.step-badge-pending {
-  background: #252a30;
+  background: #ece8df;
   color: var(--muted);
 }
 .badge.step-badge-active {
-  background: #1a2530;
-  color: #7dd3fc;
+  background: #e1edf8;
+  color: #1d5f91;
 }
 .badge.step-badge-done {
-  background: #14221c;
+  background: #dff3e9;
   color: var(--accent);
 }
 .badge.step-badge-failed {
-  background: #2a1818;
+  background: #f9e2df;
   color: var(--danger);
 }
 .badge.step-badge-blocked {
-  background: #2a1f28;
-  color: #e9a3ff;
+  background: #f2e5f6;
+  color: #8a3fa5;
 }
 .badge.step-badge-skipped {
-  background: #1e242e;
+  background: #e8ecf1;
   color: #94a3b8;
 }
 
 .badge.feat-draft {
-  background: #252a35;
+  background: #ece8e1;
   color: var(--muted);
 }
 .badge.feat-ready {
-  background: #1a2530;
-  color: #7dd3fc;
+  background: #e1edf8;
+  color: #1d5f91;
 }
 .badge.feat-executing {
-  background: #142a22;
+  background: #deefe8;
   color: var(--accent);
 }
 .badge.feat-completed {
-  background: #14221c;
-  color: #86efac;
+  background: #dff3e9;
+  color: #2b8a65;
 }
 .badge.feat-failed {
-  background: #2a1818;
+  background: #f9e2df;
   color: var(--danger);
 }
 .badge.feat-cancelled {
-  background: #242428;
-  color: #a1a1aa;
+  background: #ececf0;
+  color: #6b7280;
 }
 
 .execution-log-section {
@@ -732,7 +732,7 @@ a.btn-primary {
   word-break: break-word;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #0a0b0e;
+  background: #f4eadb;
   color: var(--muted);
   max-height: 240px;
   overflow: auto;
@@ -790,7 +790,7 @@ a.btn-primary {
 .execution-log-details {
   margin-top: 0.5rem;
   max-height: 200px;
-  color: #a8b0c4;
+  color: #6e6357;
 }
 
 .activity-head {
@@ -865,7 +865,7 @@ a.btn-primary {
 }
 
 .activity-row.kind-error .activity-message {
-  color: #fecaca;
+  color: #9f2f2a;
 }
 
 @media (prefers-reduced-motion: reduce) {
