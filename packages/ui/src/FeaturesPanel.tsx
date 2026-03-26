@@ -577,8 +577,16 @@ export function FeaturesPanel(props: {
               <section className="execution-counters card" aria-label="Execution counters">
                 <div className="execution-counters-head">
                   <h3 className="subsection-title">Execution counters</h3>
-                  {showPersistentMismatch ? (
-                    <span className="badge execution-mismatch-badge">Persistent mismatch</span>
+                  {hasCounterMismatch ? (
+                    <span
+                      className={`badge execution-mismatch-badge ${
+                        showPersistentMismatch
+                          ? "execution-mismatch-badge-persistent"
+                          : "execution-mismatch-badge-transient"
+                      }`}
+                    >
+                      {showPersistentMismatch ? "Persistent mismatch" : "Mismatch detected"}
+                    </span>
                   ) : null}
                 </div>
                 <p className="muted-sm execution-counters-subtitle">
@@ -594,7 +602,7 @@ export function FeaturesPanel(props: {
                     <div className="value">{runningCloudAgentCount}</div>
                   </div>
                 </div>
-                <p className="muted-sm execution-counter-note">
+                <p className="muted-sm execution-counter-note" aria-live="polite">
                   {showPersistentMismatch
                     ? "Counts are still diverged after 10s. Check activity feed and agent launches."
                     : hasCounterMismatch
