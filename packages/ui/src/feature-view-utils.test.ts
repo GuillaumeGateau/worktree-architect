@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOfficeLayoutModel,
+  chooseDefaultFeatureRunId,
   countRunningCloudAgents,
   deriveAgentStageState,
   deriveOfficeSceneState,
@@ -36,6 +37,63 @@ describe("feature-view-utils", () => {
     ];
     expect(filterAndReverseActivity(rows, "all").map((r) => r.id)).toEqual(["3", "2", "1"]);
     expect(filterAndReverseActivity(rows, "agent").map((r) => r.id)).toEqual(["3", "1"]);
+  });
+
+  it("chooses most recent executing run over finished ones", () => {
+    expect(
+      chooseDefaultFeatureRunId([
+        {
+          id: "f-finished-newest",
+          status: "completed",
+          createdAt: "2026-03-26T12:00:00.000Z",
+          updatedAt: "2026-03-26T12:00:00.000Z",
+        },
+        {
+          id: "f-executing",
+          status: "executing",
+          createdAt: "2026-03-26T11:00:00.000Z",
+          updatedAt: "2026-03-26T11:30:00.000Z",
+        },
+      ])
+    ).toBe("f-executing");
+  });
+
+  it("falls back to most recently finished run when none executing", () => {
+    expect(
+      chooseDefaultFeatureRunId([
+        {
+          id: "f-failed-older",
+          status: "failed",
+          createdAt: "2026-03-26T09:00:00.000Z",
+          updatedAt: "2026-03-26T09:00:00.000Z",
+        },
+        {
+          id: "f-cancelled-newer",
+          status: "cancelled",
+          createdAt: "2026-03-26T10:00:00.000Z",
+          updatedAt: "2026-03-26T10:00:00.000Z",
+        },
+      ])
+    ).toBe("f-cancelled-newer");
+  });
+
+  it("returns null when there is no executing or finished run", () => {
+    expect(
+      chooseDefaultFeatureRunId([
+        {
+          id: "f-ready",
+          status: "ready",
+          createdAt: "2026-03-26T09:00:00.000Z",
+          updatedAt: "2026-03-26T09:00:00.000Z",
+        },
+        {
+          id: "f-draft",
+          status: "draft",
+          createdAt: "2026-03-26T10:00:00.000Z",
+          updatedAt: "2026-03-26T10:00:00.000Z",
+        },
+      ])
+    ).toBeNull();
   });
 
   it("extracts cursor agent ids from launch urls", () => {

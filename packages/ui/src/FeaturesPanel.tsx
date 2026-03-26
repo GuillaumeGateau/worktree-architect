@@ -11,6 +11,7 @@ import {
 } from "./api";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import {
+  chooseDefaultFeatureRunId,
   countRunningCloudAgents,
   deriveAgentStageState,
   deriveDeskState,
@@ -174,6 +175,12 @@ export function FeaturesPanel(props: {
 
   const features = (featuresQ.data as FeatureRow[] | undefined) ?? [];
   const activity = (activityQ.data as ActivityEventRow[] | undefined) ?? [];
+
+  useEffect(() => {
+    if (selectedId) return;
+    const defaultFeatureId = chooseDefaultFeatureRunId(features);
+    if (defaultFeatureId) setSelectedId(defaultFeatureId);
+  }, [features, selectedId, setSelectedId]);
 
   const filteredActivity = useMemo(
     () => filterAndReverseActivity(activity, activityKind),
