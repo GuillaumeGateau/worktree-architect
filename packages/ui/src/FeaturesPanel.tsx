@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ComponentType } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { canCancelFeature, canStartFeature } from "@orch-os/core";
 import type { FeatureStatus } from "@orch-os/core";
@@ -6,13 +6,17 @@ import {
   fetchFeatureActivity,
   fetchFeatureDetail,
   fetchFeatures,
+  fetchFeatureTasks,
   postFeatureCancel,
   postFeatureStart,
 } from "./api";
-import { FooB } from "./FooB";
-import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
-import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
-import { FooA } from "./FooA";
+import AgentStage from "./AgentStage";
+import type { ActivityEventRow, FeatureRow, FeatureStepRow, FeatureTaskRow } from "./types";
+import {
+  deriveAgentStageState,
+  filterAndReverseActivity,
+  sortStepsByOrdinal,
+} from "./feature-view-utils";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 
@@ -74,6 +78,29 @@ function formatDetailsJson(details: Record<string, unknown> | undefined): string
   }
 }
 
+type AgentStageTaskView = {
+  id: string;
+  ordinal: number;
+  title: string;
+  status: string;
+  stepId?: string;
+  agentId?: string;
+};
+
+type AgentStageFeatureView = {
+  feature: FeatureRow;
+  steps: FeatureStepRow[];
+  tasks?: AgentStageTaskView[];
+  activity?: ActivityEventRow[];
+};
+
+type AgentStageCompatProps = {
+  tasks?: AgentStageTaskView[];
+  feature?: AgentStageFeatureView;
+  className?: string;
+  figures?: ReturnType<typeof deriveAgentStageState>["figures"];
+};
+
 export function FeaturesPanel(props: {
   live: boolean;
   selectedId: string | null;
@@ -107,6 +134,13 @@ export function FeaturesPanel(props: {
     refetchInterval: featureStatusForPoll === "executing" ? 2500 : false,
   });
 
+  const tasksQ = useQuery({
+    queryKey: ["feature", selectedId, "tasks"],
+    queryFn: () => fetchFeatureTasks(selectedId!),
+    enabled: Boolean(selectedId),
+    refetchInterval: featureStatusForPoll === "executing" ? 2500 : false,
+  });
+
   const invalidateFeatures = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ["features"] });
   }, [qc]);
@@ -115,12 +149,14 @@ export function FeaturesPanel(props: {
     (fid: string) => {
       void qc.invalidateQueries({ queryKey: ["feature", fid] });
       void qc.invalidateQueries({ queryKey: ["feature", fid, "activity"] });
+      void qc.invalidateQueries({ queryKey: ["feature", fid, "tasks"] });
     },
     [qc]
   );
 
   const features = (featuresQ.data as FeatureRow[] | undefined) ?? [];
   const activity = (activityQ.data as ActivityEventRow[] | undefined) ?? [];
+  const tasks = (tasksQ.data as FeatureTaskRow[] | undefined) ?? [];
 
   const filteredActivity = useMemo(
     () => filterAndReverseActivity(activity, activityKind),
@@ -138,6 +174,25 @@ export function FeaturesPanel(props: {
   );
 
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
+  const stageTasks = useMemo(
+    () =>
+      [...tasks]
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((t) => ({
+          id: t.id,
+          ordinal: t.ordinal,
+          title: t.title,
+          status: t.status,
+          stepId: detail?.steps.find((s) => s.ordinal === t.ordinal)?.id,
+          agentId: t.agentId,
+        })),
+    [detail?.steps, tasks]
+  );
+  const stageDerived = useMemo(
+    () => deriveAgentStageState(activity, sortedSteps),
+    [activity, sortedSteps]
+  );
+  const AgentStageCompat = AgentStage as unknown as ComponentType<AgentStageCompatProps>;
 
   const runStart = useCallback(async () => {
     if (!selectedId) return;
@@ -148,6 +203,7 @@ export function FeaturesPanel(props: {
       await Promise.all([
         qc.refetchQueries({ queryKey: ["feature", selectedId] }),
         qc.refetchQueries({ queryKey: ["feature", selectedId, "activity"] }),
+        qc.refetchQueries({ queryKey: ["feature", selectedId, "tasks"] }),
       ]);
       invalidateSelected(selectedId);
       invalidateFeatures();
@@ -167,6 +223,7 @@ export function FeaturesPanel(props: {
       await Promise.all([
         qc.refetchQueries({ queryKey: ["feature", selectedId] }),
         qc.refetchQueries({ queryKey: ["feature", selectedId, "activity"] }),
+        qc.refetchQueries({ queryKey: ["feature", selectedId, "tasks"] }),
       ]);
       invalidateSelected(selectedId);
       invalidateFeatures();
@@ -205,7 +262,6 @@ export function FeaturesPanel(props: {
     <div className="features-layout">
       <div className="features-list-col">
         <h2 className="section-title">Feature runs</h2>
-        <p className="muted-sm">FooA marker: {FooA}</p>
         {featuresQ.error && (
           <div className="error-banner" role="alert">
             Could not load features: {(featuresQ.error as Error).message}
@@ -239,9 +295,6 @@ export function FeaturesPanel(props: {
       </div>
 
       <div className="features-detail-col">
-        <div className="muted-sm" data-testid="foo-b-marker">
-          {FooB}
-        </div>
         {!selectedId ? (
           <div className="table-wrap empty">Select a feature run to see the plan and activity.</div>
         ) : detailQ.isLoading ? (
@@ -539,52 +592,77 @@ export function FeaturesPanel(props: {
               )}
             </section>
 
-            <section className="execution-log-section card" aria-label="Execution log raw">
-              <h3 className="subsection-title">Execution log (raw)</h3>
-              <p className="muted-sm execution-log-hint">
-                Chronological trail from <code className="mono">GET …/activity</code> (up to 500 events).
-                {featureStatusForPoll === "executing"
-                  ? " Polling every 2.5s while this run is executing."
-                  : null}
-                {activityQ.isFetching ? (
-                  <span className="execution-log-fetching"> Refreshing…</span>
-                ) : null}
-              </p>
-              <div className="execution-log-links">
-                <div className="label">feature.links</div>
-                <pre className="execution-log-pre" tabIndex={0}>
-                  {JSON.stringify(detail.feature.links ?? {}, null, 2)}
-                </pre>
-              </div>
-              {activityQ.isLoading ? (
-                <p className="muted-sm">Loading activity…</p>
-              ) : activity.length === 0 ? (
+            <section className="card" aria-label="Agent stage">
+              <h3 className="subsection-title">Agent stage</h3>
+              {tasksQ.error ? (
                 <p className="muted-sm">
-                  No activity rows — if you just clicked Start, wait for the refetch or check the API
-                  process logs; empty here usually means nothing wrote to{" "}
-                  <code className="mono">activity_events</code> for this feature id.
+                  Could not load tasks: {(tasksQ.error as Error).message}
                 </p>
-              ) : (
-                <ol className="execution-log-entries">
-                  {activity.map((a) => {
-                    const dj = formatDetailsJson(a.details);
-                    return (
-                      <li key={a.id} className="execution-log-entry">
-                        <div className="execution-log-line">
-                          <span className="mono execution-log-ts">{a.createdAt}</span>
-                          <span className="badge activity-kind">{a.kind}</span>
-                          <span className="mono execution-log-id">{a.id}</span>
-                          {a.stepId ? (
-                            <span className="mono muted-sm execution-log-step">step {a.stepId}</span>
-                          ) : null}
-                        </div>
-                        <div className="execution-log-message">{a.message}</div>
-                        {dj ? <pre className="execution-log-pre execution-log-details">{dj}</pre> : null}
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
+              ) : null}
+              <AgentStageCompat
+                className="feature-agent-stage"
+                tasks={stageTasks}
+                feature={{
+                  feature: detail.feature,
+                  steps: sortedSteps,
+                  tasks: stageTasks,
+                  activity,
+                }}
+                figures={stageDerived.figures}
+              />
+              {tasksQ.isLoading && stageTasks.length === 0 ? (
+                <p className="muted-sm">Loading tasks…</p>
+              ) : null}
+            </section>
+
+            <section className="execution-log-section card" aria-label="Execution log raw">
+              <details>
+                <summary className="subsection-title">Execution log (raw)</summary>
+                <p className="muted-sm execution-log-hint">
+                  Chronological trail from <code className="mono">GET …/activity</code> (up to 500 events).
+                  {featureStatusForPoll === "executing"
+                    ? " Polling every 2.5s while this run is executing."
+                    : null}
+                  {activityQ.isFetching ? (
+                    <span className="execution-log-fetching"> Refreshing…</span>
+                  ) : null}
+                </p>
+                <div className="execution-log-links">
+                  <div className="label">feature.links</div>
+                  <pre className="execution-log-pre" tabIndex={0}>
+                    {JSON.stringify(detail.feature.links ?? {}, null, 2)}
+                  </pre>
+                </div>
+                {activityQ.isLoading ? (
+                  <p className="muted-sm">Loading activity…</p>
+                ) : activity.length === 0 ? (
+                  <p className="muted-sm">
+                    No activity rows — if you just clicked Start, wait for the refetch or check the API
+                    process logs; empty here usually means nothing wrote to{" "}
+                    <code className="mono">activity_events</code> for this feature id.
+                  </p>
+                ) : (
+                  <ol className="execution-log-entries">
+                    {activity.map((a) => {
+                      const dj = formatDetailsJson(a.details);
+                      return (
+                        <li key={a.id} className="execution-log-entry">
+                          <div className="execution-log-line">
+                            <span className="mono execution-log-ts">{a.createdAt}</span>
+                            <span className="badge activity-kind">{a.kind}</span>
+                            <span className="mono execution-log-id">{a.id}</span>
+                            {a.stepId ? (
+                              <span className="mono muted-sm execution-log-step">step {a.stepId}</span>
+                            ) : null}
+                          </div>
+                          <div className="execution-log-message">{a.message}</div>
+                          {dj ? <pre className="execution-log-pre execution-log-details">{dj}</pre> : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </details>
             </section>
 
             <section className="feature-activity" aria-label="Activity">
