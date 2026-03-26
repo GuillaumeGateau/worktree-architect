@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildOfficeLayoutModel,
   deriveAgentStageState,
+  deriveOfficeSceneState,
   extractCursorAgentId,
   filterAndReverseActivity,
+  normalizeOfficeLifecycleState,
   sortStepsByOrdinal,
   toHumanStatusLabel,
 } from "./feature-view-utils";
@@ -130,6 +133,146 @@ describe("feature-view-utils", () => {
       figureId: "task-1",
       state: "done",
       statusLabel: "Done ✓",
+    });
+  });
+
+  it("builds deterministic office layout with desk grid and zones", () => {
+    const layout = buildOfficeLayoutModel(5, { deskColumns: 3 });
+    expect(layout.deskRows).toBe(2);
+    expect(layout.deskColumns).toBe(3);
+    expect(layout.desks.map((d) => d.id)).toEqual([
+      "desk-0",
+      "desk-1",
+      "desk-2",
+      "desk-3",
+      "desk-4",
+    ]);
+    expect(layout.zones.hub.id).toBe("zone-hub");
+    expect(layout.zones.review.id).toBe("zone-review");
+    expect(layout.zones.test.id).toBe("zone-test");
+    expect(layout.transitPaths.map((p) => p.id)).toEqual([
+      "path-desk-0-to-zone-hub",
+      "path-desk-1-to-zone-hub",
+      "path-desk-2-to-zone-hub",
+      "path-desk-3-to-zone-hub",
+      "path-desk-4-to-zone-hub",
+      "path-zone-hub-to-zone-review",
+      "path-zone-hub-to-zone-test",
+    ]);
+  });
+
+  it("normalizes lifecycle states for office scene status model", () => {
+    expect(normalizeOfficeLifecycleState("Running tests now")).toBe("testing");
+    expect(normalizeOfficeLifecycleState("Merge audit in review")).toBe("review");
+    expect(normalizeOfficeLifecycleState("Done ✓")).toBe("done");
+    expect(normalizeOfficeLifecycleState("Failed with error")).toBe("failed");
+    expect(normalizeOfficeLifecycleState("Cancelled by user")).toBe("cancelled");
+    expect(normalizeOfficeLifecycleState("queued")).toBe("waiting");
+    expect(normalizeOfficeLifecycleState("working")).toBe("active");
+  });
+
+  it("maps figures into desks, execution zones, and transit paths", () => {
+    const scene = deriveOfficeSceneState(
+      [
+        {
+          figureId: "task-0",
+          role: "agent",
+          taskOrdinal: 0,
+          state: "working",
+          statusLabel: "Working",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "task-1",
+          role: "agent",
+          taskOrdinal: 1,
+          state: "working",
+          statusLabel: "Reviewing PR",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "task-2",
+          role: "agent",
+          taskOrdinal: 2,
+          state: "working",
+          statusLabel: "Testing integration",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "task-3",
+          role: "agent",
+          taskOrdinal: 3,
+          state: "done",
+          statusLabel: "Done ✓",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "task-4",
+          role: "agent",
+          taskOrdinal: 4,
+          state: "done",
+          statusLabel: "Failed",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "task-5",
+          role: "agent",
+          taskOrdinal: 5,
+          state: "idle",
+          statusLabel: "Cancelled by user",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+        {
+          figureId: "merge-auditor",
+          role: "auditor",
+          state: "idle",
+          statusLabel: "Waiting for merge",
+          updatedAt: "2026-03-25T10:00:00.000Z",
+        },
+      ],
+      { deskColumns: 3 }
+    );
+
+    const byId = Object.fromEntries(scene.placements.map((p) => [p.figureId, p]));
+    expect(byId["task-0"]).toMatchObject({
+      deskZoneId: "desk-0",
+      currentZoneId: "zone-hub",
+      lifecycleState: "active",
+      transitPathIds: ["path-desk-0-to-zone-hub"],
+    });
+    expect(byId["task-1"]).toMatchObject({
+      deskZoneId: "desk-1",
+      currentZoneId: "zone-review",
+      lifecycleState: "review",
+      transitPathIds: ["path-desk-1-to-zone-hub", "path-zone-hub-to-zone-review"],
+    });
+    expect(byId["task-2"]).toMatchObject({
+      deskZoneId: "desk-2",
+      currentZoneId: "zone-test",
+      lifecycleState: "testing",
+      transitPathIds: ["path-desk-2-to-zone-hub", "path-zone-hub-to-zone-test"],
+    });
+    expect(byId["task-3"]).toMatchObject({
+      deskZoneId: "desk-3",
+      currentZoneId: "desk-3",
+      lifecycleState: "done",
+      transitPathIds: [],
+    });
+    expect(byId["task-4"]).toMatchObject({
+      deskZoneId: "desk-4",
+      currentZoneId: "desk-4",
+      lifecycleState: "failed",
+      transitPathIds: [],
+    });
+    expect(byId["task-5"]).toMatchObject({
+      deskZoneId: "desk-5",
+      currentZoneId: "desk-5",
+      lifecycleState: "cancelled",
+      transitPathIds: [],
+    });
+    expect(byId["merge-auditor"]).toMatchObject({
+      currentZoneId: "desk-6",
+      lifecycleState: "waiting",
     });
   });
 });
