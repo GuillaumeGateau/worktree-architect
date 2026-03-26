@@ -58,3 +58,17 @@ export type FeatureDetailPayload = {
   feature: FeatureRow;
   steps: FeatureStepRow[];
 };
+
+export type FeatureTaskRow = {
+  id: string;
+  featureId: string;
+  ordinal: number;
+  title: string;
+  summary?: string;
+  dependsOn: string;
+  status: string;
+  agentId?: string;
+  branch?: string;
+  createdAt: string;
+  updatedAt: string;
+};

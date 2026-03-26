@@ -34,6 +34,15 @@ export async function fetchFeatureActivity(
   return data.activity;
 }
 
+export async function fetchFeatureTasks(
+  id: string
+): Promise<import("./types").FeatureTaskRow[]> {
+  const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/tasks`);
+  if (!r.ok) throw featureApiError("tasks", r.status);
+  const data = (await r.json()) as { tasks: import("./types").FeatureTaskRow[] };
+  return data.tasks;
+}
+
 export async function postFeatureStart(id: string): Promise<void> {
   const r = await fetch(`${base}/api/v1/features/${encodeURIComponent(id)}/start`, {
     method: "POST",
