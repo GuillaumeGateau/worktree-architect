@@ -13,6 +13,57 @@ export function filterAndReverseActivity<T extends { kind: string }>(
   return filtered.reverse();
 }
 
+type FeatureRunListEntryLike = {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const FINISHED_FEATURE_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+function parseDateMs(value: string): number {
+  const ts = Date.parse(value);
+  return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+}
+
+function isMoreRecentFeatureRun(
+  candidate: FeatureRunListEntryLike,
+  currentBest: FeatureRunListEntryLike | null
+): boolean {
+  if (!currentBest) return true;
+  const candidateUpdatedMs = parseDateMs(candidate.updatedAt);
+  const currentUpdatedMs = parseDateMs(currentBest.updatedAt);
+  if (candidateUpdatedMs !== currentUpdatedMs) return candidateUpdatedMs > currentUpdatedMs;
+  const candidateCreatedMs = parseDateMs(candidate.createdAt);
+  const currentCreatedMs = parseDateMs(currentBest.createdAt);
+  return candidateCreatedMs > currentCreatedMs;
+}
+
+/**
+ * Choose the run to auto-select when the UI has no active selection:
+ * newest executing run first, else newest finished run.
+ */
+export function chooseDefaultFeatureRunId(features: FeatureRunListEntryLike[]): string | null {
+  let mostRecentExecuting: FeatureRunListEntryLike | null = null;
+  let mostRecentFinished: FeatureRunListEntryLike | null = null;
+  for (const feature of features) {
+    const status = feature.status.trim().toLowerCase();
+    if (status === "executing") {
+      if (isMoreRecentFeatureRun(feature, mostRecentExecuting)) {
+        mostRecentExecuting = feature;
+      }
+      continue;
+    }
+    if (FINISHED_FEATURE_STATUSES.has(status)) {
+      if (isMoreRecentFeatureRun(feature, mostRecentFinished)) {
+        mostRecentFinished = feature;
+      }
+    }
+  }
+  return mostRecentExecuting?.id ?? mostRecentFinished?.id ?? null;
+}
+
 export type SceneRoleState = "active" | "blocked" | "waiting";
 
 export type SceneRoleStatusLine = {
