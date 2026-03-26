@@ -22,6 +22,7 @@ import {
   patchFeature,
   mergeFeatureLinks,
   listSteps,
+  syncStepStatusFromTaskTruth,
   type FeatureTaskRecord,
 } from "./db-features.js";
 import {
@@ -370,6 +371,25 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
   // currentRef is updated to the integration branch after the first task merges
   let currentRef = ref;
 
+  function syncStepsFromTaskTruth(): void {
+    const before = listSteps(db, fid);
+    const beforeById = new Map(before.map((s) => [s.id, s.status]));
+    const after = syncStepStatusFromTaskTruth(db, fid);
+    let changed = false;
+    for (const step of after) {
+      if (beforeById.get(step.id) === step.status) continue;
+      changed = true;
+      emitOrchestratorEvent({
+        type: "step_updated",
+        featureId: fid,
+        stepId: step.id,
+      });
+    }
+    if (changed) {
+      emitOrchestratorEvent({ type: "feature_updated", featureId: fid });
+    }
+  }
+
   function log(message: string, kind: "plan" | "tool" | "agent" | "note" | "error" | "merge" = "note") {
     const ev = appendActivity(db, fid, { kind, message: message.slice(0, 4000) });
     if (ev) emitActivity(fid, ev);
@@ -412,6 +432,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
           branch: launched.branchName ?? taskBranch,
           updatedAt: new Date().toISOString(),
         });
+        syncStepsFromTaskTruth();
 
         log(
           `L2 agent launched for task [${task.ordinal}] "${task.title}" — ${launched.targetUrl} (branch: ${taskBranch}, ref: ${taskRef})`,
@@ -444,6 +465,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
               branch: completedBranch,
               updatedAt: new Date().toISOString(),
             });
+            syncStepsFromTaskTruth();
 
             log(
               `L2 task [${task.ordinal}] "${task.title}" ${taskStatus === "done" ? "completed" : "FAILED"}.${summary ? ` ${summary}` : ""}`,
@@ -473,6 +495,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         upsertFeatureTask(db, { ...task, status: "failed", updatedAt: new Date().toISOString() });
+        syncStepsFromTaskTruth();
         log(`L2 agent launch failed for task "${task.title}": ${msg.slice(0, 500)}`, "error");
         onTaskTerminal();
       }
@@ -572,6 +595,7 @@ export function startTaskEngine(opts: TaskEngineOptions): void {
     fid,
     steps.map((s) => ({ title: s.title, summary: s.summary, ordinal: s.ordinal }))
   );
+  syncStepsFromTaskTruth();
 
   if (tasks.length === 0) {
     log("No steps found — nothing to dispatch.", "note");

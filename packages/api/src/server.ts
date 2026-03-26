@@ -38,6 +38,7 @@ import {
   listActivity,
   getFeatureTasks,
   upsertFeatureTask,
+  syncStepStatusFromTaskTruth,
   type FeatureTaskRecord,
 } from "./db-features.js";
 import {
@@ -879,6 +880,7 @@ export async function buildServer(opts: ServerOptions) {
         branch: body.branch ?? task.branch,
         updatedAt: new Date().toISOString(),
       });
+      syncStepStatusFromTaskTruth(db, featureId);
       emitOrchestratorEvent({ type: "feature_updated", featureId });
       return updated;
     }

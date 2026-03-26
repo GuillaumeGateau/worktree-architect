@@ -494,6 +494,88 @@ featureWorktree:
     await app.close();
   });
 
+  it("syncs step status from task truth in task API patch flow", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-task-sync-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: {
+        title: "Task sync",
+        status: "ready",
+        steps: [
+          { title: "Step A", ordinal: 0 },
+          { title: "Step B", ordinal: 1 },
+        ],
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const { id } = JSON.parse(create.body) as { id: string };
+
+    // startFeature marks first step active
+    const start = await app.inject({ method: "POST", url: `/api/v1/features/${id}/start` });
+    expect(start.statusCode).toBe(200);
+
+    const seed = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${id}/tasks`,
+      payload: {
+        tasks: [
+          { title: "T0", ordinal: 0 },
+          { title: "T1", ordinal: 1 },
+        ],
+      },
+    });
+    expect(seed.statusCode).toBe(200);
+    const tasks = (JSON.parse(seed.body) as { tasks: { id: string }[] }).tasks;
+    expect(tasks).toHaveLength(2);
+
+    // Done task should force step 0 to done (remove pending/active drift)
+    const done0 = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${id}/tasks/${tasks[0].id}`,
+      payload: { status: "done" },
+    });
+    expect(done0.statusCode).toBe(200);
+
+    const detailAfterDone = await app.inject({ method: "GET", url: `/api/v1/features/${id}` });
+    expect(detailAfterDone.statusCode).toBe(200);
+    const stepsAfterDone = (JSON.parse(detailAfterDone.body) as { steps: { status: string }[] }).steps;
+    expect(stepsAfterDone[0].status).toBe("done");
+    expect(stepsAfterDone[1].status).toBe("pending");
+
+    // Active/failed tasks should project to step status too
+    const active1 = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${id}/tasks/${tasks[1].id}`,
+      payload: { status: "active" },
+    });
+    expect(active1.statusCode).toBe(200);
+    const detailAfterActive = await app.inject({ method: "GET", url: `/api/v1/features/${id}` });
+    const stepsAfterActive = (JSON.parse(detailAfterActive.body) as { steps: { status: string }[] }).steps;
+    expect(stepsAfterActive[1].status).toBe("active");
+
+    const failed1 = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${id}/tasks/${tasks[1].id}`,
+      payload: { status: "failed" },
+    });
+    expect(failed1.statusCode).toBe(200);
+    const detailAfterFailed = await app.inject({ method: "GET", url: `/api/v1/features/${id}` });
+    const stepsAfterFailed = (JSON.parse(detailAfterFailed.body) as { steps: { status: string }[] }).steps;
+    expect(stepsAfterFailed[1].status).toBe("failed");
+
+    await app.close();
+  });
+
   it("feature start auto-launches Cursor Cloud without cursorCloudAgent yaml when origin is GitHub", async () => {
     process.env.CURSOR_API_KEY = "test-key";
     vi.stubGlobal(
