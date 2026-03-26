@@ -507,6 +507,72 @@ describe("feature-view-utils", () => {
     ]);
   });
 
+  it("captures completion trust signals from source-of-truth activity and step statuses", () => {
+    const steps = [
+      { id: "s0", ordinal: 0, title: "Implement", status: "done" },
+      { id: "s1", ordinal: 1, title: "Validate", status: "done" },
+    ];
+    const activity = [
+      {
+        id: "a1",
+        kind: "agent",
+        message:
+          'L2 agent launched for task [0] "Implement" — https://cursor.com/agents/agt_task_0 (branch: orch-task)',
+        createdAt: "2026-03-26T10:00:00.000Z",
+      },
+      {
+        id: "a2",
+        kind: "tool",
+        message: 'L2 task [0] "Implement" completed.',
+        stepId: "s0",
+        createdAt: "2026-03-26T10:01:00.000Z",
+      },
+      {
+        id: "a3",
+        kind: "merge",
+        message: "Merge auditor completed",
+        createdAt: "2026-03-26T10:02:00.000Z",
+      },
+      {
+        id: "a4",
+        kind: "tool",
+        message: "QA verification passed",
+        stepId: "s1",
+        createdAt: "2026-03-26T10:03:00.000Z",
+      },
+    ];
+
+    const stage = deriveAgentStageState(activity, steps);
+    const activeTaskCount = steps.filter((step) => step.status === "active").length;
+    const runningCloudAgentCount = countRunningCloudAgents(stage.figures);
+
+    // Dashboard counters should be reconcilable from API-backed step + activity truth.
+    expect(activeTaskCount).toBe(0);
+    expect(runningCloudAgentCount).toBe(0);
+    expect(activeTaskCount).toBe(runningCloudAgentCount);
+
+    expect(deriveSceneRoleStatusLines("completed", steps, activity)).toEqual([
+      {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "waiting",
+        detail: "Execution complete; waiting on reviewer/tester",
+      },
+      {
+        role: "reviewer",
+        label: "Reviewer",
+        state: "waiting",
+        detail: "Review complete",
+      },
+      {
+        role: "tester",
+        label: "Tester",
+        state: "waiting",
+        detail: "Testing complete",
+      },
+    ]);
+  });
+
   it("counts running cloud agents from derived figures", () => {
     const derived = deriveAgentStageState(
       [
