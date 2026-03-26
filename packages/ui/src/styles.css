@@ -571,6 +571,27 @@ tr:focus-within {
   margin-bottom: 0.7rem;
 }
 
+.desk-role-legend {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.desk-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.16rem 0.45rem;
+  font-size: 0.66rem;
+  color: #8da3c0;
+  background: #111722;
+}
+
 .desk-avatars-grid {
   list-style: none;
   margin: 0;
@@ -587,6 +608,22 @@ tr:focus-within {
   background: #0f1218;
 }
 
+.desk-avatar-role-worker {
+  border-color: rgba(147, 197, 253, 0.35);
+}
+
+.desk-avatar-role-orchestrator {
+  border-color: rgba(249, 168, 212, 0.4);
+}
+
+.desk-avatar-role-reviewer {
+  border-color: rgba(196, 181, 253, 0.4);
+}
+
+.desk-avatar-role-tester {
+  border-color: rgba(110, 231, 183, 0.45);
+}
+
 .desk-avatar-headline {
   display: flex;
   align-items: center;
@@ -600,14 +637,24 @@ tr:focus-within {
   padding: 0.14rem 0.38rem;
 }
 
-.badge.desk-avatar-role-agent {
+.badge.desk-avatar-role-worker {
   background: #1b2936;
   color: #93c5fd;
 }
 
-.badge.desk-avatar-role-auditor {
+.badge.desk-avatar-role-orchestrator {
   background: #2a1f28;
   color: #f0abfc;
+}
+
+.badge.desk-avatar-role-reviewer {
+  background: #261f34;
+  color: #c4b5fd;
+}
+
+.badge.desk-avatar-role-tester {
+  background: #182a24;
+  color: #86efac;
 }
 
 .desk-avatar-updated {
@@ -616,11 +663,21 @@ tr:focus-within {
 
 .desk-avatar-scene {
   position: relative;
-  height: 62px;
+  height: 68px;
   margin: 0.5rem 0 0.6rem;
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(125, 211, 252, 0.07) 0%, rgba(15, 18, 24, 0.55) 100%);
   overflow: hidden;
+}
+
+.desk-avatar-light {
+  position: absolute;
+  top: 2px;
+  left: 8px;
+  width: 36px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.2);
 }
 
 .desk-avatar-desk {
@@ -657,7 +714,7 @@ tr:focus-within {
 .desk-avatar-head-shape {
   position: absolute;
   left: 23%;
-  bottom: 34px;
+  bottom: 38px;
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -672,6 +729,115 @@ tr:focus-within {
   height: 16px;
   border-radius: 8px 8px 4px 4px;
   background: #64748b;
+}
+
+.desk-avatar-arm-shape {
+  position: absolute;
+  width: 11px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.9);
+}
+
+.desk-avatar-arm-shape-left {
+  left: 26%;
+  bottom: 24px;
+  transform: rotate(-14deg);
+}
+
+.desk-avatar-arm-shape-right {
+  left: 31%;
+  bottom: 25px;
+  transform: rotate(11deg);
+}
+
+.desk-avatar-keyboard {
+  position: absolute;
+  left: 44%;
+  right: 22%;
+  bottom: 12px;
+  height: 4px;
+  border-radius: 999px;
+  background: #475569;
+}
+
+.desk-avatar-role-marker {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.54rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+
+.desk-role-pill .desk-avatar-role-marker {
+  position: static;
+  width: 14px;
+  height: 14px;
+  font-size: 0.5rem;
+}
+
+.desk-avatar-role-marker-worker {
+  background: #1b2936;
+  color: #bfdbfe;
+  border-color: rgba(147, 197, 253, 0.45);
+}
+
+.desk-avatar-role-marker-orchestrator {
+  background: #2a1f28;
+  color: #f0abfc;
+  border-color: rgba(244, 114, 182, 0.5);
+}
+
+.desk-avatar-role-marker-reviewer {
+  background: #261f34;
+  color: #ddd6fe;
+  border-color: rgba(196, 181, 253, 0.5);
+}
+
+.desk-avatar-role-marker-tester {
+  background: #1a2b22;
+  color: #bbf7d0;
+  border-color: rgba(110, 231, 183, 0.55);
+}
+
+.desk-avatar-head-shape-worker {
+  background: #d6dbe7;
+}
+
+.desk-avatar-head-shape-orchestrator {
+  background: #f5d0fe;
+}
+
+.desk-avatar-head-shape-reviewer {
+  background: #ddd6fe;
+}
+
+.desk-avatar-head-shape-tester {
+  background: #bbf7d0;
+}
+
+.desk-avatar-body-shape-worker {
+  background: #64748b;
+}
+
+.desk-avatar-body-shape-orchestrator {
+  background: #a855f7;
+}
+
+.desk-avatar-body-shape-reviewer {
+  background: #8b5cf6;
+}
+
+.desk-avatar-body-shape-tester {
+  background: #0f766e;
 }
 
 .desk-avatar-body {
