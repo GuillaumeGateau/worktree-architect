@@ -361,6 +361,194 @@ tr:focus-within {
   line-height: 1.4;
 }
 
+.desk-avatars {
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1rem;
+}
+
+.desk-avatars-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.desk-avatars-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.desk-avatar {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.7rem 0.7rem;
+  background: #0f1218;
+}
+
+.desk-avatar-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.badge.desk-avatar-role {
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  padding: 0.14rem 0.38rem;
+}
+
+.badge.desk-avatar-role-agent {
+  background: #1b2936;
+  color: #93c5fd;
+}
+
+.badge.desk-avatar-role-auditor {
+  background: #2a1f28;
+  color: #f0abfc;
+}
+
+.desk-avatar-updated {
+  font-size: 0.64rem;
+}
+
+.desk-avatar-scene {
+  position: relative;
+  height: 62px;
+  margin: 0.5rem 0 0.6rem;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(125, 211, 252, 0.07) 0%, rgba(15, 18, 24, 0.55) 100%);
+  overflow: hidden;
+}
+
+.desk-avatar-desk {
+  position: absolute;
+  left: 24%;
+  right: 8%;
+  bottom: 8px;
+  height: 16px;
+  border-radius: 6px;
+  background: #273242;
+}
+
+.desk-avatar-monitor {
+  position: absolute;
+  right: 18%;
+  bottom: 24px;
+  width: 28px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid #334155;
+  background: #101828;
+}
+
+.desk-avatar-chair {
+  position: absolute;
+  left: 18%;
+  bottom: 10px;
+  width: 18px;
+  height: 22px;
+  border-radius: 5px 5px 3px 3px;
+  background: #1e293b;
+}
+
+.desk-avatar-head-shape {
+  position: absolute;
+  left: 23%;
+  bottom: 34px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d4d8e1;
+}
+
+.desk-avatar-body-shape {
+  position: absolute;
+  left: 20%;
+  bottom: 18px;
+  width: 18px;
+  height: 16px;
+  border-radius: 8px 8px 4px 4px;
+  background: #64748b;
+}
+
+.desk-avatar-body {
+  min-width: 0;
+}
+
+.desk-avatar-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.desk-avatar-subtitle {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 0.72rem;
+}
+
+.desk-avatar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.33rem;
+  max-width: 100%;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.16rem 0.45rem;
+  white-space: nowrap;
+}
+
+.desk-avatar-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.desk-avatar-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desk-avatar-status-idle {
+  background: #1e242e;
+  color: #a8b0c4;
+}
+.desk-avatar-status-idle .desk-avatar-status-dot {
+  background: #94a3b8;
+}
+
+.desk-avatar-status-walking {
+  background: #1a2530;
+  color: #7dd3fc;
+}
+.desk-avatar-status-walking .desk-avatar-status-dot {
+  background: #38bdf8;
+}
+
+.desk-avatar-status-working {
+  background: #13251f;
+  color: #6ee7b7;
+}
+.desk-avatar-status-working .desk-avatar-status-dot {
+  background: #34d399;
+}
+
+.desk-avatar-status-done {
+  background: #1f2937;
+  color: #cbd5e1;
+}
+.desk-avatar-status-done .desk-avatar-status-dot {
+  background: #cbd5e1;
+}
+
 .main-tabs {
   display: flex;
   flex-wrap: wrap;
