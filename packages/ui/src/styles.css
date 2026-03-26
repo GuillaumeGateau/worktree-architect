@@ -3,6 +3,7 @@
   --bg: #eef3fb;
   --surface: #f9fbff;
   --surface-elevated: #ffffff;
+  --surface-soft: #f4f8ff;
   --border: #d2dcea;
   --border-strong: #b8c7dd;
   --text: #152236;
@@ -335,6 +336,7 @@ tr:focus-within {
 .execution-counters {
   margin-bottom: 1.25rem;
   padding: 0.85rem 1rem;
+  background: linear-gradient(180deg, #f9fbff 0%, #f4f8ff 100%);
 }
 
 .execution-counters-head {
@@ -360,7 +362,8 @@ tr:focus-within {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.7rem;
-  background: rgba(10, 11, 14, 0.5);
+  background: var(--surface-elevated);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .execution-counter-item .label {
@@ -382,9 +385,9 @@ tr:focus-within {
 }
 
 .badge.execution-mismatch-badge {
-  background: #2a1818;
-  color: #fecaca;
-  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: #fff1f1;
+  color: #8f2620;
+  border: 1px solid #efb6b2;
 }
 
 .worktree-path {
@@ -406,6 +409,7 @@ tr:focus-within {
 .office-stage {
   margin-bottom: 1.25rem;
   padding: 0.85rem 1rem;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f9ff 100%);
 }
 
 .office-stage-head {
@@ -436,6 +440,7 @@ tr:focus-within {
     rgba(110, 231, 183, 0.08) 75%,
     rgba(110, 231, 183, 0.14) 100%
   );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
   overflow: hidden;
 }
 
@@ -443,10 +448,14 @@ tr:focus-within {
   position: absolute;
   top: 6px;
   transform: translateX(-50%);
-  font-size: 0.64rem;
-  color: var(--muted);
-  letter-spacing: 0.04em;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #465a75;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
   pointer-events: none;
 }
 
@@ -471,7 +480,8 @@ tr:focus-within {
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
   border: 1px solid rgba(139, 146, 165, 0.4);
-  background: rgba(12, 13, 16, 0.86);
+  background: #f5f8ff;
+  box-shadow: 0 2px 8px rgba(29, 50, 85, 0.12);
   max-width: 78%;
   will-change: transform;
 }
@@ -485,26 +495,30 @@ tr:focus-within {
 
 .office-figure-status {
   font-size: 0.68rem;
-  color: var(--muted);
+  color: #4a607d;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .office-figure.role-auditor {
-  border-color: rgba(125, 211, 252, 0.45);
+  border-color: #d8c3f1;
+  background: #faf4ff;
 }
 
 .office-figure.state-working {
-  border-color: rgba(110, 231, 183, 0.55);
+  border-color: #98ddbc;
+  background: #edf9f3;
 }
 
 .office-figure.state-walking {
-  border-color: rgba(125, 211, 252, 0.6);
+  border-color: #a8d7f8;
+  background: #edf7ff;
 }
 
 .office-figure.state-done {
-  border-color: rgba(110, 231, 183, 0.5);
+  border-color: #b8cde5;
+  background: #f0f5fd;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -584,7 +598,8 @@ tr:focus-within {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.65rem 0.7rem 0.7rem;
-  background: #0f1218;
+  background: var(--surface-elevated);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .desk-avatar-headline {
@@ -601,13 +616,13 @@ tr:focus-within {
 }
 
 .badge.desk-avatar-role-agent {
-  background: #1b2936;
-  color: #93c5fd;
+  background: #e8f3ff;
+  color: #0f6bb8;
 }
 
 .badge.desk-avatar-role-auditor {
-  background: #2a1f28;
-  color: #f0abfc;
+  background: #f6ecff;
+  color: #8f45b3;
 }
 
 .desk-avatar-updated {
@@ -619,7 +634,8 @@ tr:focus-within {
   height: 62px;
   margin: 0.5rem 0 0.6rem;
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(125, 211, 252, 0.07) 0%, rgba(15, 18, 24, 0.55) 100%);
+  border: 1px solid #d8e6f7;
+  background: linear-gradient(180deg, #f3f8ff 0%, #eaf2fc 100%);
   overflow: hidden;
 }
 
@@ -630,7 +646,7 @@ tr:focus-within {
   bottom: 8px;
   height: 16px;
   border-radius: 6px;
-  background: #273242;
+  background: #c5d6ea;
 }
 
 .desk-avatar-monitor {
@@ -640,8 +656,8 @@ tr:focus-within {
   width: 28px;
   height: 18px;
   border-radius: 3px;
-  border: 1px solid #334155;
-  background: #101828;
+  border: 1px solid #9fb5cf;
+  background: #dde9f7;
 }
 
 .desk-avatar-chair {
@@ -651,7 +667,7 @@ tr:focus-within {
   width: 18px;
   height: 22px;
   border-radius: 5px 5px 3px 3px;
-  background: #1e293b;
+  background: #9cb2cb;
 }
 
 .desk-avatar-head-shape {
@@ -661,7 +677,8 @@ tr:focus-within {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #d4d8e1;
+  background: #f2f5fa;
+  border: 1px solid #c3d0e1;
 }
 
 .desk-avatar-body-shape {
@@ -671,7 +688,7 @@ tr:focus-within {
   width: 18px;
   height: 16px;
   border-radius: 8px 8px 4px 4px;
-  background: #64748b;
+  background: #8ea6c2;
 }
 
 .desk-avatar-body {
@@ -714,35 +731,35 @@ tr:focus-within {
 }
 
 .desk-avatar-status-idle {
-  background: #1e242e;
-  color: #a8b0c4;
+  background: #eef2f8;
+  color: #526681;
 }
 .desk-avatar-status-idle .desk-avatar-status-dot {
-  background: #94a3b8;
+  background: #6d829c;
 }
 
 .desk-avatar-status-walking {
-  background: #1a2530;
-  color: #7dd3fc;
+  background: #e8f4ff;
+  color: #0f6bb8;
 }
 .desk-avatar-status-walking .desk-avatar-status-dot {
-  background: #38bdf8;
+  background: #0d74d8;
 }
 
 .desk-avatar-status-working {
-  background: #13251f;
-  color: #6ee7b7;
+  background: #e8f7ef;
+  color: #117b56;
 }
 .desk-avatar-status-working .desk-avatar-status-dot {
-  background: #34d399;
+  background: #17a06f;
 }
 
 .desk-avatar-status-done {
-  background: #1f2937;
-  color: #cbd5e1;
+  background: #ebf1f9;
+  color: #415a76;
 }
 .desk-avatar-status-done .desk-avatar-status-dot {
-  background: #cbd5e1;
+  background: #607a98;
 }
 
 .office-role-status {
@@ -780,18 +797,18 @@ tr:focus-within {
 }
 
 .badge.office-role-state-active {
-  background: #1a2530;
-  color: #7dd3fc;
+  background: #e8f4ff;
+  color: #0f6bb8;
 }
 
 .badge.office-role-state-blocked {
-  background: #2a1f28;
-  color: #e9a3ff;
+  background: #f6ecff;
+  color: #8f45b3;
 }
 
 .badge.office-role-state-waiting {
-  background: #252a30;
-  color: var(--muted);
+  background: #edf2fb;
+  color: #526681;
 }
 
 .office-role-detail {
