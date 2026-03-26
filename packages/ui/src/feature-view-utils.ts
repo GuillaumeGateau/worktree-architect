@@ -43,6 +43,7 @@ type StepLike = {
   id: string;
   ordinal: number;
   status?: string;
+  updatedAt?: string;
 };
 
 type ActivityLike = {
@@ -690,16 +691,39 @@ export function toHumanStatusLabel(kind: string, message: string): string {
   return shortenLabel(message);
 }
 
+const MOTION_SETTLE_MS = 1400;
+
+function parseTimestampMs(value: string | undefined): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 /**
  * Movement zone for rendering:
  * - walking: leave desk and move toward the assigned zone
- * - working: stay in task/merge zone
- * - done/idle: return and remain at desk
+ * - working: briefly pass through transition, then stay in task/merge zone
+ * - done: briefly transition back, then return to desk
+ * - idle: remain at desk
  */
-export function motionZoneForFigure(figure: AgentStageFigure): AgentStageMotionZone {
+export function motionZoneForFigure(
+  figure: AgentStageFigure,
+  nowMs: number = Date.now()
+): AgentStageMotionZone {
+  const updatedMs = parseTimestampMs(figure.updatedAt);
+  const recentlyUpdated =
+    updatedMs !== null && nowMs >= updatedMs && nowMs - updatedMs < MOTION_SETTLE_MS;
+
   if (figure.state === "walking") return "transition";
-  if (figure.role === "auditor") return figure.state === "working" ? "merge" : "desk";
-  if (figure.state === "working") return "task";
+
+  if (figure.role === "auditor") {
+    if (figure.state === "working") return recentlyUpdated ? "transition" : "merge";
+    if (figure.state === "done") return recentlyUpdated ? "transition" : "desk";
+    return "desk";
+  }
+
+  if (figure.state === "working") return recentlyUpdated ? "transition" : "task";
+  if (figure.state === "done") return recentlyUpdated ? "transition" : "desk";
   return "desk";
 }
 
@@ -757,13 +781,6 @@ function getAuditorFigure(figures: Map<string, AgentStageFigure>): AgentStageFig
 }
 
 const UNSET_AT = new Date(0).toISOString();
-
-function stateRank(state: AgentStageFigureState): number {
-  if (state === "idle") return 0;
-  if (state === "walking") return 1;
-  if (state === "working") return 2;
-  return 3;
-}
 
 function stepStatusToFigureState(
   status?: string
@@ -833,9 +850,20 @@ export function deriveAgentStageState(
     fig.stepOrdinal = step.ordinal;
     const fromStep = stepStatusToFigureState(step.status);
     if (!fromStep) continue;
-    if (fig.updatedAt === UNSET_AT || stateRank(fromStep.state) > stateRank(fig.state)) {
+    const stepUpdatedMs = parseTimestampMs(step.updatedAt);
+    const figureUpdatedMs = parseTimestampMs(fig.updatedAt);
+    const canApplyStepStatus =
+      fig.updatedAt === UNSET_AT ||
+      stepUpdatedMs === null ||
+      figureUpdatedMs === null ||
+      stepUpdatedMs >= figureUpdatedMs;
+
+    if (canApplyStepStatus) {
       fig.state = fromStep.state;
       fig.statusLabel = fromStep.label;
+      if (stepUpdatedMs !== null) {
+        fig.updatedAt = new Date(stepUpdatedMs).toISOString();
+      }
     }
   }
 
