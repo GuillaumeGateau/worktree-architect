@@ -13,6 +13,15 @@ export function filterAndReverseActivity<T extends { kind: string }>(
   return filtered.reverse();
 }
 
+export type SceneRoleState = "active" | "blocked" | "waiting";
+
+export type SceneRoleStatusLine = {
+  role: "orchestrator" | "reviewer" | "tester";
+  label: string;
+  state: SceneRoleState;
+  detail: string;
+};
+
 export type AgentStageFigureState = "idle" | "walking" | "working" | "done";
 export type AgentStageFigureRole = "agent" | "auditor";
 
@@ -44,6 +53,13 @@ type ActivityLike = {
 export type AgentStageDerivedState = {
   figures: AgentStageFigure[];
   agentIdToFigure: Record<string, string>;
+};
+
+type SceneStepLike = {
+  id: string;
+  ordinal: number;
+  title: string;
+  status: string;
 };
 
 const TASK_AGENT_LAUNCHED_RE =
@@ -108,6 +124,184 @@ function shortenLabel(message: string): string {
   const compact = message.replace(/\s+/g, " ").trim();
   if (!compact) return "Working";
   return compact.length > 56 ? `${compact.slice(0, 55)}…` : compact;
+}
+
+function latestMatchingActivity(
+  activity: ActivityLike[],
+  predicate: (ev: ActivityLike) => boolean
+): ActivityLike | undefined {
+  const filtered = activity.filter(predicate);
+  if (filtered.length === 0) return undefined;
+  return [...filtered].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )[0];
+}
+
+function isBlockedMessage(message: string): boolean {
+  return /\b(blocked|failed|error|launch failed)\b/i.test(message);
+}
+
+function isCompletedMessage(message: string): boolean {
+  return /\b(completed|done|finished|passed|success)\b/i.test(message);
+}
+
+export function deriveSceneRoleStatusLines(
+  featureStatus: string | undefined,
+  steps: SceneStepLike[],
+  activity: ActivityLike[]
+): SceneRoleStatusLine[] {
+  const activeStep = steps.find((s) => s.status === "active");
+  const blockedStep = steps.find((s) => s.status === "blocked");
+  const terminalFeature = ["completed", "failed", "cancelled"].includes(featureStatus ?? "");
+
+  const orchestrator: SceneRoleStatusLine = (() => {
+    if (featureStatus === "executing") {
+      if (blockedStep) {
+        return {
+          role: "orchestrator",
+          label: "Orchestrator",
+          state: "blocked",
+          detail: `Blocked on step ${blockedStep.ordinal}: ${blockedStep.title}`,
+        };
+      }
+      if (activeStep) {
+        return {
+          role: "orchestrator",
+          label: "Orchestrator",
+          state: "active",
+          detail: `Executing step ${activeStep.ordinal}: ${activeStep.title}`,
+        };
+      }
+      return {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "active",
+        detail: "Coordinating execution",
+      };
+    }
+    if (featureStatus === "failed") {
+      return {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "blocked",
+        detail: "Execution failed before handoff",
+      };
+    }
+    if (featureStatus === "cancelled") {
+      return {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "blocked",
+        detail: "Execution cancelled",
+      };
+    }
+    if (featureStatus === "completed") {
+      return {
+        role: "orchestrator",
+        label: "Orchestrator",
+        state: "waiting",
+        detail: "Execution complete; waiting on reviewer/tester",
+      };
+    }
+    return {
+      role: "orchestrator",
+      label: "Orchestrator",
+      state: "waiting",
+      detail: "Waiting for Start",
+    };
+  })();
+
+  const reviewerEvent = latestMatchingActivity(
+    activity,
+    (ev) => ev.kind === "merge" || /merge auditor|review/i.test(ev.message)
+  );
+  const reviewer: SceneRoleStatusLine = (() => {
+    if (reviewerEvent) {
+      if (isBlockedMessage(reviewerEvent.message)) {
+        return {
+          role: "reviewer",
+          label: "Reviewer",
+          state: "blocked",
+          detail: shortenLabel(reviewerEvent.message),
+        };
+      }
+      if (isCompletedMessage(reviewerEvent.message)) {
+        return {
+          role: "reviewer",
+          label: "Reviewer",
+          state: "waiting",
+          detail: "Review complete",
+        };
+      }
+      return {
+        role: "reviewer",
+        label: "Reviewer",
+        state: "active",
+        detail: toHumanStatusLabel(reviewerEvent.kind, reviewerEvent.message),
+      };
+    }
+    if (terminalFeature) {
+      return {
+        role: "reviewer",
+        label: "Reviewer",
+        state: "waiting",
+        detail: "Waiting to review the completed run",
+      };
+    }
+    return {
+      role: "reviewer",
+      label: "Reviewer",
+      state: "waiting",
+      detail: "Waiting for orchestrator handoff",
+    };
+  })();
+
+  const testerEvent = latestMatchingActivity(
+    activity,
+    (ev) => ev.kind === "tool" && /\b(test|tests|qa|verify|verification)\b/i.test(ev.message)
+  );
+  const tester: SceneRoleStatusLine = (() => {
+    if (testerEvent) {
+      if (isBlockedMessage(testerEvent.message)) {
+        return {
+          role: "tester",
+          label: "Tester",
+          state: "blocked",
+          detail: shortenLabel(testerEvent.message),
+        };
+      }
+      if (isCompletedMessage(testerEvent.message)) {
+        return {
+          role: "tester",
+          label: "Tester",
+          state: "waiting",
+          detail: "Testing complete",
+        };
+      }
+      return {
+        role: "tester",
+        label: "Tester",
+        state: "active",
+        detail: shortenLabel(testerEvent.message),
+      };
+    }
+    if (terminalFeature) {
+      return {
+        role: "tester",
+        label: "Tester",
+        state: "waiting",
+        detail: "Waiting for validation/testing work",
+      };
+    }
+    return {
+      role: "tester",
+      label: "Tester",
+      state: "waiting",
+      detail: "Waiting for reviewer signal",
+    };
+  })();
+
+  return [orchestrator, reviewer, tester];
 }
 
 export function toHumanStatusLabel(kind: string, message: string): string {
