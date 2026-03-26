@@ -97,6 +97,139 @@ autoCursorCloudAgentOnStart: false
     await app.close();
   });
 
+  it("smoke validates reviewer/tester role and status flow", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+
+    const createReviewer = await app.inject({
+      method: "POST",
+      url: "/api/v1/jobs",
+      payload: { role: "reviewer", contractVersion: 1 },
+    });
+    expect(createReviewer.statusCode).toBe(200);
+    const reviewer = JSON.parse(createReviewer.body) as { id: string; role?: string; status: string };
+    expect(reviewer.role).toBe("reviewer");
+    expect(reviewer.status).toBe("queued");
+
+    const reviewerClaimed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${reviewer.id}`,
+      payload: { status: "claimed", workerId: "reviewer-1" },
+    });
+    expect(reviewerClaimed.statusCode).toBe(200);
+    expect((JSON.parse(reviewerClaimed.body) as { status: string }).status).toBe("claimed");
+
+    const reviewerRunning = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${reviewer.id}`,
+      payload: { status: "running" },
+    });
+    expect(reviewerRunning.statusCode).toBe(200);
+    expect((JSON.parse(reviewerRunning.body) as { status: string }).status).toBe("running");
+
+    const reviewerSucceeded = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${reviewer.id}`,
+      payload: { status: "succeeded" },
+    });
+    expect(reviewerSucceeded.statusCode).toBe(200);
+    expect((JSON.parse(reviewerSucceeded.body) as { status: string }).status).toBe("succeeded");
+
+    const reviewerInvalidAfterTerminal = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${reviewer.id}`,
+      payload: { status: "running" },
+    });
+    expect(reviewerInvalidAfterTerminal.statusCode).toBe(400);
+    expect((JSON.parse(reviewerInvalidAfterTerminal.body) as { error: string }).error).toBe("invalid_transition");
+
+    const createTester = await app.inject({
+      method: "POST",
+      url: "/api/v1/jobs",
+      payload: { role: "tester", contractVersion: 1 },
+    });
+    expect(createTester.statusCode).toBe(200);
+    const tester = JSON.parse(createTester.body) as { id: string; role?: string; status: string };
+    expect(tester.role).toBe("tester");
+    expect(tester.status).toBe("queued");
+
+    const testerInvalidInitialJump = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "succeeded" },
+    });
+    expect(testerInvalidInitialJump.statusCode).toBe(400);
+    expect((JSON.parse(testerInvalidInitialJump.body) as { error: string }).error).toBe("invalid_transition");
+
+    const testerClaimed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "claimed", workerId: "tester-1" },
+    });
+    expect(testerClaimed.statusCode).toBe(200);
+    expect((JSON.parse(testerClaimed.body) as { status: string }).status).toBe("claimed");
+
+    const testerRunning = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "running" },
+    });
+    expect(testerRunning.statusCode).toBe(200);
+    expect((JSON.parse(testerRunning.body) as { status: string }).status).toBe("running");
+
+    const testerBlocked = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "blocked", blockedReason: "waiting on reviewer feedback" },
+    });
+    expect(testerBlocked.statusCode).toBe(200);
+    const blockedBody = JSON.parse(testerBlocked.body) as { status: string; blockedReason?: string };
+    expect(blockedBody.status).toBe("blocked");
+    expect(blockedBody.blockedReason).toBe("waiting on reviewer feedback");
+
+    const testerRequeued = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "queued" },
+    });
+    expect(testerRequeued.statusCode).toBe(200);
+    expect((JSON.parse(testerRequeued.body) as { status: string }).status).toBe("queued");
+
+    const testerClaimedAgain = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "claimed", workerId: "tester-1" },
+    });
+    expect(testerClaimedAgain.statusCode).toBe(200);
+    expect((JSON.parse(testerClaimedAgain.body) as { status: string }).status).toBe("claimed");
+
+    const testerRunningAgain = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "running" },
+    });
+    expect(testerRunningAgain.statusCode).toBe(200);
+    expect((JSON.parse(testerRunningAgain.body) as { status: string }).status).toBe("running");
+
+    const testerSucceeded = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/jobs/${tester.id}`,
+      payload: { status: "succeeded" },
+    });
+    expect(testerSucceeded.statusCode).toBe(200);
+    expect((JSON.parse(testerSucceeded.body) as { status: string }).status).toBe("succeeded");
+
+    await app.close();
+  });
+
   it("feature create, detail, start, activity", async () => {
     dir = mkdtempSync(join(tmpdir(), "orch-api-"));
     writeFileSync(
