@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { AgentStageFigure } from "./feature-view-utils";
 
 function roleLabel(role: AgentStageFigure["role"]): string {
-  return role === "auditor" ? "Merge auditor" : "L2 agent";
+  return role === "auditor" ? "Merge auditor" : "Task agent";
 }
 
 function deskTitle(figure: AgentStageFigure): string {
@@ -13,7 +13,7 @@ function deskTitle(figure: AgentStageFigure): string {
 }
 
 function deskSubtitle(figure: AgentStageFigure): string {
-  if (figure.role === "auditor") return "Verifies final merge output";
+  if (figure.role === "auditor") return "Reviews final merge output";
   if (figure.stepOrdinal !== undefined) return `Plan step ${figure.stepOrdinal}`;
   if (figure.agentId) return `Agent ${figure.agentId.slice(0, 8)}…`;
   return "Waiting for next assignment";
@@ -42,9 +42,9 @@ export function DeskAgentAvatars({ figures }: Props) {
   return (
     <section className="desk-avatars card" aria-label="Office desk agents">
       <div className="desk-avatars-head">
-        <h3 className="subsection-title">Office agents</h3>
+        <h3 className="subsection-title">Office desk roster</h3>
         <span className="muted-sm">
-          {sortedFigures.length} desk persona{sortedFigures.length === 1 ? "" : "s"}
+          {sortedFigures.length} active desk{sortedFigures.length === 1 ? "" : "s"}
         </span>
       </div>
 
