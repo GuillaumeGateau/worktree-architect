@@ -132,11 +132,13 @@ export function FeaturesPanel(props: {
   selectedId: string | null;
   onSelectId: (id: string | null) => void;
 }) {
+  const featureRunsRailId = "feature-runs-rail";
   const qc = useQueryClient();
   const { selectedId, onSelectId: setSelectedId } = props;
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activityKind, setActivityKind] = useState<string>("all");
+  const [isRailCollapsed, setIsRailCollapsed] = useState(true);
 
   const featuresQ = useQuery({
     queryKey: ["features"],
@@ -174,6 +176,10 @@ export function FeaturesPanel(props: {
 
   const features = (featuresQ.data as FeatureRow[] | undefined) ?? [];
   const activity = (activityQ.data as ActivityEventRow[] | undefined) ?? [];
+  const selectedFeature = useMemo(
+    () => features.find((feature) => feature.id === selectedId),
+    [features, selectedId]
+  );
 
   const filteredActivity = useMemo(
     () => filterAndReverseActivity(activity, activityKind),
@@ -331,39 +337,69 @@ export function FeaturesPanel(props: {
   })();
 
   return (
-    <div className="features-layout">
-      <div className="features-list-col">
-        <h2 className="section-title">Feature runs</h2>
-        <p className="muted-sm">Desk map: {FooA(deskState)}</p>
-        {featuresQ.error && (
-          <div className="error-banner" role="alert">
-            Could not load features: {(featuresQ.error as Error).message}
-          </div>
-        )}
-        {features.length === 0 && !featuresQ.isLoading ? (
-          <div className="table-wrap empty">
-            No feature runs yet. Use{" "}
-            <code className="mono">orchestrator feature create</code> or{" "}
-            <code className="mono">/build-feature</code> from Cursor.
+    <div className={`features-layout ${isRailCollapsed ? "rail-collapsed" : ""}`}>
+      <div className={`features-list-col ${isRailCollapsed ? "collapsed" : ""}`}>
+        <div className="feature-list-col-head">
+          <h2 className="section-title">Feature runs</h2>
+          <button
+            type="button"
+            className="rail-toggle-btn"
+            aria-controls={featureRunsRailId}
+            aria-expanded={!isRailCollapsed}
+            onClick={() => setIsRailCollapsed((collapsed) => !collapsed)}
+          >
+            {isRailCollapsed ? "Expand run list" : "Collapse run list"}
+          </button>
+        </div>
+
+        {isRailCollapsed ? (
+          <div
+            id={featureRunsRailId}
+            className="feature-rail-collapsed-note"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="muted-sm">Feature list is collapsed by default.</p>
+            <p className="muted-sm">
+              {selectedFeature
+                ? `Selected: ${selectedFeature.title}`
+                : "Expand the run list to browse feature runs."}
+            </p>
           </div>
         ) : (
-          <ul className="feature-list" aria-label="Feature runs">
-            {features.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  className={`feature-list-item ${selectedId === f.id ? "active" : ""}`}
-                  onClick={() => setSelectedId(f.id)}
-                >
-                  <span className="feature-list-title">{f.title}</span>
-                  <span className={featureBadgeClass(f.status)}>{f.status}</span>
-                  <span className="feature-list-id mono" title={f.id}>
-                    {f.id.slice(0, 10)}…
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div id={featureRunsRailId}>
+            <p className="muted-sm">Desk map: {FooA(deskState)}</p>
+            {featuresQ.error && (
+              <div className="error-banner" role="alert">
+                Could not load features: {(featuresQ.error as Error).message}
+              </div>
+            )}
+            {features.length === 0 && !featuresQ.isLoading ? (
+              <div className="table-wrap empty">
+                No feature runs yet. Use{" "}
+                <code className="mono">orchestrator feature create</code> or{" "}
+                <code className="mono">/build-feature</code> from Cursor.
+              </div>
+            ) : (
+              <ul className="feature-list" aria-label="Feature runs">
+                {features.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      className={`feature-list-item ${selectedId === f.id ? "active" : ""}`}
+                      onClick={() => setSelectedId(f.id)}
+                    >
+                      <span className="feature-list-title">{f.title}</span>
+                      <span className={featureBadgeClass(f.status)}>{f.status}</span>
+                      <span className="feature-list-id mono" title={f.id}>
+                        {f.id.slice(0, 10)}…
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
 
