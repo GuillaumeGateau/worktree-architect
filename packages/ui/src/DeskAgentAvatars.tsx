@@ -34,7 +34,7 @@ function deskTitle(figure: AgentStageFigure): string {
 }
 
 function deskSubtitle(figure: AgentStageFigure): string {
-  if (figure.role === "auditor") return "Coordinates merge readiness";
+  if (figure.role === "auditor") return "Reviews final merge output";
   if (figure.role === "reviewer") return "Checks integrated code quality";
   if (figure.role === "tester") return "Validates runtime behavior";
   if (figure.stepOrdinal !== undefined) return `Plan step ${figure.stepOrdinal}`;
@@ -66,9 +66,9 @@ export function DeskAgentAvatars({ figures }: Props) {
   return (
     <section className="desk-avatars card" aria-label="Office desk agents">
       <div className="desk-avatars-head">
-        <h3 className="subsection-title">Office agents</h3>
+        <h3 className="subsection-title">Office desk roster</h3>
         <span className="muted-sm">
-          {sortedFigures.length} desk persona{sortedFigures.length === 1 ? "" : "s"}
+          {sortedFigures.length} active desk{sortedFigures.length === 1 ? "" : "s"}
         </span>
       </div>
       <ul className="desk-role-legend" aria-label="Desk role markers">

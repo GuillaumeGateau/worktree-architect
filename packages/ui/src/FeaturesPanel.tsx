@@ -655,7 +655,7 @@ export function FeaturesPanel(props: {
                 <div className="office-stage-head">
                   <h3 className="subsection-title">Shared office</h3>
                   <p className="muted-sm">
-                    Agents leave their desk as work starts and return when complete.
+                    Agents move desk → task zone → merge, then return when complete.
                   </p>
                 </div>
                 <div className="office-stage-track" style={{ height: `${officeTrackHeight}px` }}>
