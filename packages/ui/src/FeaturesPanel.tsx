@@ -9,10 +9,12 @@ import {
   postFeatureCancel,
   postFeatureStart,
 } from "./api";
-import { FooB } from "./FooB";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
-import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
-import { FooA } from "./FooA";
+import {
+  deriveSceneRoleStatusLines,
+  filterAndReverseActivity,
+  sortStepsByOrdinal,
+} from "./feature-view-utils";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 
@@ -138,6 +140,10 @@ export function FeaturesPanel(props: {
   );
 
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
+  const sceneRoleStatus = useMemo(
+    () => deriveSceneRoleStatusLines(detail?.feature.status, sortedSteps, activity),
+    [activity, detail?.feature.status, sortedSteps]
+  );
 
   const runStart = useCallback(async () => {
     if (!selectedId) return;
@@ -205,7 +211,6 @@ export function FeaturesPanel(props: {
     <div className="features-layout">
       <div className="features-list-col">
         <h2 className="section-title">Feature runs</h2>
-        <p className="muted-sm">FooA marker: {FooA}</p>
         {featuresQ.error && (
           <div className="error-banner" role="alert">
             Could not load features: {(featuresQ.error as Error).message}
@@ -239,9 +244,6 @@ export function FeaturesPanel(props: {
       </div>
 
       <div className="features-detail-col">
-        <div className="muted-sm" data-testid="foo-b-marker">
-          {FooB}
-        </div>
         {!selectedId ? (
           <div className="table-wrap empty">Select a feature run to see the plan and activity.</div>
         ) : detailQ.isLoading ? (
@@ -446,6 +448,23 @@ export function FeaturesPanel(props: {
                 )}
               </div>
             )}
+
+            <section className="office-role-status card" aria-label="Shared office role status">
+              <h3 className="subsection-title">Shared office role status</h3>
+              <ul className="office-role-list">
+                {sceneRoleStatus.map((line) => (
+                  <li key={line.role} className="office-role-row">
+                    <div className="office-role-main">
+                      <span className="office-role-label">{line.label}</span>
+                      <span className={`badge office-role-state office-role-state-${line.state}`}>
+                        {line.state}
+                      </span>
+                    </div>
+                    <p className="office-role-detail">{line.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
 
             {wtPath && (
               <div className="worktree-banner card" role="region" aria-label="Git worktree">
