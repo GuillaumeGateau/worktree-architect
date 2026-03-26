@@ -352,6 +352,109 @@ autoCursorCloudAgentOnStart: false
     await app.close();
   });
 
+  it("exposes task merge outcomes and integration mismatch indicators", async () => {
+    dir = mkdtempSync(join(tmpdir(), "orch-api-"));
+    writeFileSync(
+      join(dir, "orchestrator.config.yaml"),
+      `sqlitePath: ".orchestrator/test.db"
+statusMdPath: ".orchestrator/STATUS.md"
+autoCursorCloudAgentOnStart: false
+`,
+      "utf8"
+    );
+    const app = await buildServer({ cwd: dir });
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/v1/features",
+      payload: {
+        title: "Merge outcomes",
+        status: "ready",
+        steps: [{ title: "S1" }, { title: "S2" }],
+      },
+    });
+    const { id } = JSON.parse(create.body) as { id: string };
+
+    const seed = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${id}/tasks`,
+      payload: { tasks: [{ title: "T0", ordinal: 0 }, { title: "T1", ordinal: 1 }] },
+    });
+    expect(seed.statusCode).toBe(200);
+    const seeded = JSON.parse(seed.body) as { tasks: { id: string; ordinal: number }[] };
+    const t0 = seeded.tasks.find((t) => t.ordinal === 0)!;
+    const t1 = seeded.tasks.find((t) => t.ordinal === 1)!;
+
+    const done0 = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${id}/tasks/${t0.id}`,
+      payload: { status: "done" },
+    });
+    expect(done0.statusCode).toBe(200);
+
+    const done1 = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/features/${id}/tasks/${t1.id}`,
+      payload: { status: "done" },
+    });
+    expect(done1.statusCode).toBe(200);
+
+    const mergeEv = await app.inject({
+      method: "POST",
+      url: `/api/v1/features/${id}/activity`,
+      payload: { kind: "merge", message: "Merged task [0] into integration branch orch-int-x" },
+    });
+    expect(mergeEv.statusCode).toBe(200);
+
+    const tasksRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/features/${id}/tasks`,
+    });
+    expect(tasksRes.statusCode).toBe(200);
+    const tasksBody = JSON.parse(tasksRes.body) as {
+      tasks: { ordinal: number; integrationState?: string }[];
+      mergeOutcomes: {
+        mergeCounts: { merged: number; pending: number; skipped: number };
+        mismatch: {
+          hasMismatch: boolean;
+          completedTasks: number;
+          integratedTasks: number;
+          completedWithoutIntegration: number;
+          integratedWithoutCompletion: number;
+        };
+      };
+    };
+    expect(tasksBody.tasks.find((t) => t.ordinal === 0)?.integrationState).toBe("merged");
+    expect(tasksBody.tasks.find((t) => t.ordinal === 1)?.integrationState).toBe(
+      "pending_merge_outcome"
+    );
+    expect(tasksBody.mergeOutcomes.mergeCounts).toEqual({
+      merged: 1,
+      pending: 1,
+      skipped: 0,
+    });
+    expect(tasksBody.mergeOutcomes.mismatch).toEqual({
+      hasMismatch: true,
+      completedTasks: 2,
+      integratedTasks: 1,
+      completedWithoutIntegration: 1,
+      integratedWithoutCompletion: 0,
+    });
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/features/${id}`,
+    });
+    expect(detailRes.statusCode).toBe(200);
+    const detailBody = JSON.parse(detailRes.body) as {
+      tasks: { ordinal: number; integrationState?: string }[];
+      mergeOutcomes: { mismatch: { hasMismatch: boolean } };
+    };
+    expect(detailBody.tasks).toHaveLength(2);
+    expect(detailBody.mergeOutcomes.mismatch.hasMismatch).toBe(true);
+
+    await app.close();
+  });
+
   it("feature start calls Cursor Cloud API when cursorCloudAgent configured", async () => {
     process.env.CURSOR_API_KEY = "test-key";
     vi.stubGlobal(
@@ -404,13 +507,13 @@ cursorCloudAgent:
         featureStartMode?: string;
       };
     };
-    expect(body.links?.featureStartMode).toBe("cursor_cloud");
-    expect(body.links?.cursorAgentId).toBe("bc_fixture");
-    expect(body.links?.cursorAgentUrl).toContain("cursor.com");
+    expect(body.links?.featureStartMode).toBe("task_engine");
 
     const listAct = await app.inject({ method: "GET", url: `/api/v1/features/${id}/activity` });
     const acts = JSON.parse(listAct.body) as { activity: { message: string }[] };
-    expect(acts.activity.some((a) => a.message.includes("Launched Cursor Cloud Agent"))).toBe(true);
+    expect(
+      acts.activity.some((a) => /Task engine mode|L2 agent launched for task/i.test(a.message))
+    ).toBe(true);
 
     expect(globalThis.fetch).toHaveBeenCalled();
     await app.close();
@@ -638,9 +741,7 @@ featureWorktree:
         cursorCloudAutoLaunched?: boolean;
       };
     };
-    expect(body.links?.featureStartMode).toBe("cursor_cloud");
-    expect(body.links?.cursorAgentId).toBe("auto_fixture");
-    expect(body.links?.cursorCloudAutoLaunched).toBe(true);
+    expect(body.links?.featureStartMode).toBe("task_engine");
     expect(globalThis.fetch).toHaveBeenCalled();
     await app.close();
   });

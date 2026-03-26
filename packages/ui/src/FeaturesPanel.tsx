@@ -23,6 +23,7 @@ import type { AgentStageFigure, AgentStageMotionZone } from "./feature-view-util
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
 import { FooA } from "./FooA";
 import { FooB } from "./FooB";
+import type { FeatureMergeOutcomes } from "./types";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 const COUNTER_MISMATCH_PERSIST_MS = 10000;
@@ -109,6 +110,20 @@ function formatDetailsJson(details: Record<string, unknown> | undefined): string
   } catch {
     return String(details);
   }
+}
+
+function mergeTaskBadgeClass(state: string | undefined): string {
+  if (state === "merged") return "badge merge-task-badge merge-task-badge-merged";
+  if (state === "merge_skipped") return "badge merge-task-badge merge-task-badge-skipped";
+  if (state === "pending_merge_outcome") return "badge merge-task-badge merge-task-badge-pending";
+  return "badge merge-task-badge";
+}
+
+function mergeTaskBadgeLabel(state: string | undefined): string {
+  if (state === "merged") return "merged";
+  if (state === "merge_skipped") return "merge skipped";
+  if (state === "pending_merge_outcome") return "pending merge outcome";
+  return "not completed";
 }
 
 export function FeaturesPanel(props: {
@@ -295,6 +310,8 @@ export function FeaturesPanel(props: {
   const startMode = detail ? featureStartMode(detail.feature.links) : undefined;
   const wtPath = detail ? worktreePath(detail.feature.links) : undefined;
   const wtBranch = detail ? worktreeBranch(detail.feature.links) : undefined;
+  const mergeOutcomes: FeatureMergeOutcomes | undefined = detail?.mergeOutcomes;
+  const integrationMismatch = mergeOutcomes?.mismatch;
 
   const executingSubtitle = (() => {
     if (detail?.feature.status !== "executing") return null;
@@ -601,6 +618,56 @@ export function FeaturesPanel(props: {
                       ? "Transient mismatch detected; waiting before showing a warning."
                       : "Counters are aligned."}
                 </p>
+              </section>
+            )}
+
+            {(mergeOutcomes || (detail.tasks?.length ?? 0) > 0) && (
+              <section className="merge-outcomes card" aria-label="Merge outcomes">
+                <div className="merge-outcomes-head">
+                  <h3 className="subsection-title">Merge outcomes</h3>
+                  {integrationMismatch?.hasMismatch ? (
+                    <span className="badge merge-mismatch-badge">Task/integration mismatch</span>
+                  ) : null}
+                </div>
+                <div className="merge-outcomes-grid">
+                  <div className="merge-outcome-item">
+                    <div className="label">Tasks done</div>
+                    <div className="value">{mergeOutcomes?.taskCounts.done ?? 0}</div>
+                  </div>
+                  <div className="merge-outcome-item">
+                    <div className="label">Tasks integrated</div>
+                    <div className="value">{mergeOutcomes?.mergeCounts.merged ?? 0}</div>
+                  </div>
+                  <div className="merge-outcome-item">
+                    <div className="label">Merge skipped</div>
+                    <div className="value">{mergeOutcomes?.mergeCounts.skipped ?? 0}</div>
+                  </div>
+                  <div className="merge-outcome-item">
+                    <div className="label">Awaiting merge outcome</div>
+                    <div className="value">{mergeOutcomes?.mergeCounts.pending ?? 0}</div>
+                  </div>
+                </div>
+                <p className="muted-sm merge-outcomes-note">
+                  {integrationMismatch?.hasMismatch
+                    ? `Completed without integration: ${integrationMismatch.completedWithoutIntegration}; integrated without completion: ${integrationMismatch.integratedWithoutCompletion}.`
+                    : "Task completion and integration completion are aligned."}
+                </p>
+                {detail.tasks && detail.tasks.length > 0 ? (
+                  <ul className="merge-task-list">
+                    {detail.tasks.map((task) => (
+                      <li key={task.id} className="merge-task-row">
+                        <div className="merge-task-main">
+                          <span className="mono">#{task.ordinal}</span>
+                          <span>{task.title}</span>
+                          <span className={`badge step-badge-${task.status}`}>{task.status}</span>
+                        </div>
+                        <span className={mergeTaskBadgeClass(task.integrationState)}>
+                          {mergeTaskBadgeLabel(task.integrationState)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </section>
             )}
 
