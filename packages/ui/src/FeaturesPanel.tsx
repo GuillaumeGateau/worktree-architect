@@ -11,8 +11,9 @@ import {
 } from "./api";
 import { FooB } from "./FooB";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
-import { filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
+import { deriveAgentStageState, filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
 import { FooA } from "./FooA";
+import { DeskAgentAvatars } from "./DeskAgentAvatars";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
 
@@ -138,6 +139,10 @@ export function FeaturesPanel(props: {
   );
 
   const nowActivity = useMemo(() => latestActivityRows(activity, 3), [activity]);
+  const deskFigures = useMemo(
+    () => deriveAgentStageState(activity, sortedSteps).figures,
+    [activity, sortedSteps]
+  );
 
   const runStart = useCallback(async () => {
     if (!selectedId) return;
@@ -460,6 +465,10 @@ export function FeaturesPanel(props: {
                   Terminal: <code className="mono">cd {JSON.stringify(wtPath)}</code>
                 </p>
               </div>
+            )}
+
+            {(detail.feature.status === "executing" || deskFigures.length > 0) && (
+              <DeskAgentAvatars figures={deskFigures} />
             )}
 
             {detail.feature.status === "executing" && (activeStep || nowActivity.length > 0) && (
