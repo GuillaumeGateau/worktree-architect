@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { canCancelFeature, canStartFeature } from "@orch-os/core";
 import type { FeatureStatus } from "@orch-os/core";
@@ -11,6 +11,7 @@ import {
 } from "./api";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
 import {
+  countRunningCloudAgents,
   deriveAgentStageState,
   deriveSceneRoleStatusLines,
   filterAndReverseActivity,
@@ -22,6 +23,7 @@ import { FooA } from "./FooA";
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
 
 const ACTIVITY_KINDS = ["plan", "agent", "tool", "error", "merge", "note"] as const;
+const COUNTER_MISMATCH_PERSIST_MS = 10000;
 
 function featureBadgeClass(status: string): string {
   const s = status.toLowerCase();
@@ -202,6 +204,47 @@ export function FeaturesPanel(props: {
     () => deriveSceneRoleStatusLines(detail?.feature.status, sortedSteps, activity),
     [activity, detail?.feature.status, sortedSteps]
   );
+  const activeTaskCount = useMemo(
+    () => sortedSteps.filter((s) => s.status === "active").length,
+    [sortedSteps]
+  );
+  const runningCloudAgentCount = useMemo(
+    () => countRunningCloudAgents(deskFigures),
+    [deskFigures]
+  );
+  const [mismatchSinceMs, setMismatchSinceMs] = useState<number | null>(null);
+  const [showPersistentMismatch, setShowPersistentMismatch] = useState(false);
+  const hasCounterMismatch = activeTaskCount !== runningCloudAgentCount;
+
+  useEffect(() => {
+    setMismatchSinceMs(null);
+    setShowPersistentMismatch(false);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (detail?.feature.status !== "executing" || !hasCounterMismatch) {
+      setMismatchSinceMs(null);
+      setShowPersistentMismatch(false);
+      return;
+    }
+
+    const startedAt = mismatchSinceMs ?? Date.now();
+    if (mismatchSinceMs === null) {
+      setMismatchSinceMs(startedAt);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs >= COUNTER_MISMATCH_PERSIST_MS) {
+      setShowPersistentMismatch(true);
+      return;
+    }
+
+    setShowPersistentMismatch(false);
+    const timeoutId = window.setTimeout(() => {
+      setShowPersistentMismatch(true);
+    }, COUNTER_MISMATCH_PERSIST_MS - elapsedMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [detail?.feature.status, hasCounterMismatch, mismatchSinceMs]);
 
   const runStart = useCallback(async () => {
     if (!selectedId) return;
@@ -523,6 +566,36 @@ export function FeaturesPanel(props: {
                 ))}
               </ul>
             </section>
+            {detail.feature.status === "executing" && (
+              <section className="execution-counters card" aria-label="Execution counters">
+                <div className="execution-counters-head">
+                  <h3 className="subsection-title">Execution counters</h3>
+                  {showPersistentMismatch ? (
+                    <span className="badge execution-mismatch-badge">Persistent mismatch</span>
+                  ) : null}
+                </div>
+                <p className="muted-sm execution-counters-subtitle">
+                  Active tasks in plan vs running cloud agents in activity.
+                </p>
+                <div className="execution-counter-grid">
+                  <div className="execution-counter-item">
+                    <div className="label">Active tasks</div>
+                    <div className="value">{activeTaskCount}</div>
+                  </div>
+                  <div className="execution-counter-item">
+                    <div className="label">Running cloud agents</div>
+                    <div className="value">{runningCloudAgentCount}</div>
+                  </div>
+                </div>
+                <p className="muted-sm execution-counter-note">
+                  {showPersistentMismatch
+                    ? "Counts are still diverged after 10s. Check activity feed and agent launches."
+                    : hasCounterMismatch
+                      ? "Transient mismatch detected; waiting before showing a warning."
+                      : "Counters are aligned."}
+                </p>
+              </section>
+            )}
 
             {wtPath && (
               <div className="worktree-banner card" role="region" aria-label="Git worktree">

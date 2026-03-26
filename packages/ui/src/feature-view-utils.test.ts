@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOfficeLayoutModel,
+  countRunningCloudAgents,
   deriveAgentStageState,
   deriveOfficeSceneState,
   deriveSceneRoleStatusLines,
@@ -415,5 +416,45 @@ describe("feature-view-utils", () => {
         detail: "Running tests for reviewer handoff",
       },
     ]);
+  });
+
+  it("counts running cloud agents from derived figures", () => {
+    const derived = deriveAgentStageState(
+      [
+        {
+          id: "a1",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [0] "Task zero" — https://cursor.com/agents/agt_task_0 (branch: orch-task)',
+          createdAt: "2026-03-25T11:00:00.000Z",
+        },
+        {
+          id: "a2",
+          kind: "tool",
+          message: "Working task zero",
+          stepId: "step-0",
+          createdAt: "2026-03-25T11:00:02.000Z",
+        },
+        {
+          id: "a3",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [1] "Task one" — https://cursor.com/agents/agt_task_1 (branch: orch-task)',
+          createdAt: "2026-03-25T11:01:00.000Z",
+        },
+        {
+          id: "a4",
+          kind: "tool",
+          message: 'L2 task [1] "Task one" completed.',
+          stepId: "step-1",
+          createdAt: "2026-03-25T11:02:00.000Z",
+        },
+      ],
+      [
+        { id: "step-0", ordinal: 0 },
+        { id: "step-1", ordinal: 1 },
+      ]
+    );
+    expect(countRunningCloudAgents(derived.figures)).toBe(1);
   });
 });

@@ -302,6 +302,61 @@ tr:focus-within {
   padding: 0.85rem 1rem;
 }
 
+.execution-counters {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+}
+
+.execution-counters-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.execution-counters-subtitle {
+  margin: 0 0 0.65rem;
+}
+
+.execution-counter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+
+.execution-counter-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: rgba(10, 11, 14, 0.5);
+}
+
+.execution-counter-item .label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.execution-counter-item .value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.execution-counter-note {
+  margin: 0.65rem 0 0;
+}
+
+.badge.execution-mismatch-badge {
+  background: #2a1818;
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
 .worktree-path {
   margin: 0.35rem 0 0;
   font-size: 0.78rem;

@@ -792,3 +792,13 @@ export function deriveAgentStageState(
     agentIdToFigure,
   };
 }
+
+/** Running cloud agents are launched task agents that are not terminal yet. */
+export function countRunningCloudAgents(figures: AgentStageFigure[]): number {
+  return figures.reduce((count, fig) => {
+    if (fig.role !== "agent") return count;
+    if (!fig.agentId) return count;
+    if (fig.state === "done") return count;
+    return count + 1;
+  }, 0);
+}
