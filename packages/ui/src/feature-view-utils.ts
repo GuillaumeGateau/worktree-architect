@@ -28,9 +28,12 @@ export type AgentStageFigure = {
   updatedAt: string;
 };
 
+export type AgentStageMotionZone = "desk" | "transition" | "task" | "merge";
+
 type StepLike = {
   id: string;
   ordinal: number;
+  status?: string;
 };
 
 type ActivityLike = {
@@ -438,6 +441,19 @@ export function toHumanStatusLabel(kind: string, message: string): string {
   return shortenLabel(message);
 }
 
+/**
+ * Movement zone for rendering:
+ * - walking: leave desk and move toward the assigned zone
+ * - working: stay in task/merge zone
+ * - done/idle: return and remain at desk
+ */
+export function motionZoneForFigure(figure: AgentStageFigure): AgentStageMotionZone {
+  if (figure.state === "walking") return "transition";
+  if (figure.role === "auditor") return figure.state === "working" ? "merge" : "desk";
+  if (figure.state === "working") return "task";
+  return "desk";
+}
+
 function mergeStateForActivity(message: string): AgentStageFigureState {
   if (/Merge auditor completed/i.test(message)) return "done";
   if (/Merge auditor (FAILED|launch failed)/i.test(message)) return "done";
@@ -491,6 +507,31 @@ function getAuditorFigure(figures: Map<string, AgentStageFigure>): AgentStageFig
   return created;
 }
 
+const UNSET_AT = new Date(0).toISOString();
+
+function stateRank(state: AgentStageFigureState): number {
+  if (state === "idle") return 0;
+  if (state === "walking") return 1;
+  if (state === "working") return 2;
+  return 3;
+}
+
+function stepStatusToFigureState(
+  status?: string
+): { state: AgentStageFigureState; label: string } | undefined {
+  const s = status?.toLowerCase();
+  if (!s) return undefined;
+  if (s === "active" || s === "running") return { state: "working", label: "Working" };
+  if (s === "claimed") return { state: "walking", label: "Walking to task" };
+  if (s === "done" || s === "completed" || s === "succeeded") return { state: "done", label: "Done ✓" };
+  if (s === "failed") return { state: "done", label: "Failed" };
+  if (s === "blocked") return { state: "idle", label: "Blocked" };
+  if (s === "pending" || s === "queued" || s === "ready" || s === "draft") {
+    return { state: "idle", label: "Waiting" };
+  }
+  return undefined;
+}
+
 /**
  * Derive AgentStage-ready figure state from the polled activity feed.
  * This keeps the rendering component simple and deterministic.
@@ -533,6 +574,19 @@ export function deriveAgentStageState(
       auditor.state = mergeStateForActivity(ev.message);
       auditor.statusLabel = toHumanStatusLabel(ev.kind, ev.message);
       auditor.updatedAt = ev.createdAt;
+    }
+  }
+
+  // Keep stage synchronized with live step status updates even when activity is sparse.
+  for (const step of sortStepsByOrdinal(steps)) {
+    const fig = getTaskFigure(figures, step.ordinal, stepByOrdinal);
+    fig.stepId = step.id;
+    fig.stepOrdinal = step.ordinal;
+    const fromStep = stepStatusToFigureState(step.status);
+    if (!fromStep) continue;
+    if (fig.updatedAt === UNSET_AT || stateRank(fromStep.state) > stateRank(fig.state)) {
+      fig.state = fromStep.state;
+      fig.statusLabel = fromStep.label;
     }
   }
 

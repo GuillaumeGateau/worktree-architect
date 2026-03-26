@@ -11,7 +11,13 @@ import {
 } from "./api";
 import { FooB } from "./FooB";
 import type { ActivityEventRow, FeatureRow, FeatureStepRow } from "./types";
-import { deriveAgentStageState, filterAndReverseActivity, sortStepsByOrdinal } from "./feature-view-utils";
+import {
+  deriveAgentStageState,
+  filterAndReverseActivity,
+  motionZoneForFigure,
+  sortStepsByOrdinal,
+} from "./feature-view-utils";
+import type { AgentStageFigure, AgentStageMotionZone } from "./feature-view-utils";
 import { FooA } from "./FooA";
 import { DeskAgentAvatars } from "./DeskAgentAvatars";
 
@@ -64,6 +70,32 @@ function latestActivityRows(activity: ActivityEventRow[], max: number): Activity
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
   return sorted.slice(0, max);
+}
+
+const OFFICE_DESK_X = 6;
+const OFFICE_MERGE_X = 92;
+
+function figureDisplayName(figure: AgentStageFigure): string {
+  if (figure.role === "auditor") return "Merge auditor";
+  if (figure.taskOrdinal !== undefined) return `Task ${figure.taskOrdinal}`;
+  return "Task agent";
+}
+
+function figureTargetPercent(
+  figure: AgentStageFigure,
+  zone: AgentStageMotionZone,
+  taskOrdinalToIndex: Map<number, number>,
+  taskCount: number
+): number {
+  const laneCount = Math.max(taskCount, 1);
+  const taskIndex =
+    figure.stepOrdinal !== undefined ? taskOrdinalToIndex.get(figure.stepOrdinal) ?? 0 : 0;
+  const taskX = 36 + (taskIndex / laneCount) * 40;
+  if (zone === "desk") return OFFICE_DESK_X;
+  if (zone === "merge") return OFFICE_MERGE_X;
+  if (zone === "task") return taskX;
+  const destination = figure.role === "auditor" ? OFFICE_MERGE_X : taskX;
+  return Math.max(OFFICE_DESK_X + 10, destination - 10);
 }
 
 function formatDetailsJson(details: Record<string, unknown> | undefined): string | null {
@@ -143,6 +175,29 @@ export function FeaturesPanel(props: {
     () => deriveAgentStageState(activity, sortedSteps).figures,
     [activity, sortedSteps]
   );
+  const officeFigures = useMemo(() => {
+    const derived = deriveAgentStageState(activity, sortedSteps);
+    const taskOrdinalToIndex = new Map(
+      sortedSteps.map((step, idx) => [step.ordinal, idx] as const)
+    );
+    const taskCount = sortedSteps.length;
+    return derived.figures
+      .slice()
+      .sort((a, b) => {
+        if (a.role !== b.role) return a.role === "agent" ? -1 : 1;
+        return (a.stepOrdinal ?? a.taskOrdinal ?? 0) - (b.stepOrdinal ?? b.taskOrdinal ?? 0);
+      })
+      .map((figure, lane) => {
+        const zone = motionZoneForFigure(figure);
+        return {
+          figure,
+          lane,
+          zone,
+          x: figureTargetPercent(figure, zone, taskOrdinalToIndex, taskCount),
+        };
+      });
+  }, [activity, sortedSteps]);
+  const officeTrackHeight = Math.max(128, officeFigures.length * 34 + 24);
 
   const runStart = useCallback(async () => {
     if (!selectedId) return;
@@ -469,6 +524,43 @@ export function FeaturesPanel(props: {
 
             {(detail.feature.status === "executing" || deskFigures.length > 0) && (
               <DeskAgentAvatars figures={deskFigures} />
+            )}
+
+            {(detail.feature.status === "executing" || officeFigures.length > 0) && (
+              <section className="office-stage card" aria-label="Shared office movement">
+                <div className="office-stage-head">
+                  <h3 className="subsection-title">Shared office</h3>
+                  <p className="muted-sm">
+                    Agents leave their desk as work starts and return when complete.
+                  </p>
+                </div>
+                <div className="office-stage-track" style={{ height: `${officeTrackHeight}px` }}>
+                  <span className="office-zone-label office-zone-desk">Desk</span>
+                  <span className="office-zone-label office-zone-merge">Merge</span>
+                  {sortedSteps.map((step, idx) => {
+                    const laneCount = Math.max(sortedSteps.length, 1);
+                    const left = 36 + (idx / laneCount) * 40;
+                    return (
+                      <span key={step.id} className="office-zone-label office-zone-task" style={{ left: `${left}%` }}>
+                        Zone {step.ordinal}
+                      </span>
+                    );
+                  })}
+                  {officeFigures.map(({ figure, lane, zone, x }) => (
+                    <div
+                      key={figure.figureId}
+                      className={`office-figure role-${figure.role} state-${figure.state} zone-${zone}`}
+                      style={{
+                        top: `${16 + lane * 34}px`,
+                        transform: `translate3d(${x.toFixed(2)}%, 0, 0)`,
+                      }}
+                    >
+                      <span className="office-figure-chip">{figureDisplayName(figure)}</span>
+                      <span className="office-figure-status">{figure.statusLabel}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
 
             {detail.feature.status === "executing" && (activeStep || nowActivity.length > 0) && (

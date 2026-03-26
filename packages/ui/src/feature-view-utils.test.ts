@@ -5,6 +5,7 @@ import {
   deriveOfficeSceneState,
   extractCursorAgentId,
   filterAndReverseActivity,
+  motionZoneForFigure,
   normalizeOfficeLifecycleState,
   sortStepsByOrdinal,
   toHumanStatusLabel,
@@ -133,6 +134,73 @@ describe("feature-view-utils", () => {
       figureId: "task-1",
       state: "done",
       statusLabel: "Done ✓",
+    });
+  });
+
+  it("maps figure states to movement zones", () => {
+    expect(
+      motionZoneForFigure({
+        figureId: "task-1",
+        role: "agent",
+        state: "walking",
+        statusLabel: "Walking to task",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      })
+    ).toBe("transition");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "task-1",
+        role: "agent",
+        state: "working",
+        statusLabel: "Working",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      })
+    ).toBe("task");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "merge-auditor",
+        role: "auditor",
+        state: "working",
+        statusLabel: "Merge audit running",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      })
+    ).toBe("merge");
+
+    expect(
+      motionZoneForFigure({
+        figureId: "merge-auditor",
+        role: "auditor",
+        state: "done",
+        statusLabel: "Merge done ✓",
+        updatedAt: "2026-03-25T00:00:00.000Z",
+      })
+    ).toBe("desk");
+  });
+
+  it("syncs figure state from live step status without activity", () => {
+    const derived = deriveAgentStageState(
+      [],
+      [
+        { id: "step-0", ordinal: 0, status: "active" },
+        { id: "step-1", ordinal: 1, status: "done" },
+      ]
+    );
+
+    expect(derived.figures.find((f) => f.figureId === "task-0")).toMatchObject({
+      figureId: "task-0",
+      state: "working",
+      statusLabel: "Working",
+      stepId: "step-0",
+      stepOrdinal: 0,
+    });
+    expect(derived.figures.find((f) => f.figureId === "task-1")).toMatchObject({
+      figureId: "task-1",
+      state: "done",
+      statusLabel: "Done ✓",
+      stepId: "step-1",
+      stepOrdinal: 1,
     });
   });
 
