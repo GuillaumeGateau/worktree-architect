@@ -390,6 +390,108 @@ tr:focus-within {
   border: 1px solid #efb6b2;
 }
 
+.merge-outcomes {
+  margin-bottom: 1.25rem;
+  padding: 0.85rem 1rem;
+}
+
+.merge-outcomes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.merge-outcomes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.45rem;
+}
+
+.merge-outcome-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: #f5f8ff;
+}
+
+.merge-outcome-item .label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.merge-outcome-item .value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.merge-outcomes-note {
+  margin: 0.65rem 0 0;
+}
+
+.badge.merge-mismatch-badge {
+  background: #2a1818;
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.merge-task-list {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.merge-task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.merge-task-row:last-child {
+  border-bottom: none;
+}
+
+.merge-task-main {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.badge.merge-task-badge {
+  background: #eef2f8;
+  color: #72839c;
+}
+
+.badge.merge-task-badge-merged {
+  background: #e4f4ee;
+  color: #117b56;
+}
+
+.badge.merge-task-badge-skipped {
+  background: #fff4df;
+  color: var(--warn);
+}
+
+.badge.merge-task-badge-pending {
+  background: #e8f4ff;
+  color: #0f6bb8;
+}
+
 .worktree-path {
   margin: 0.35rem 0 0;
   font-size: 0.78rem;
