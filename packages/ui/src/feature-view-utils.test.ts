@@ -48,6 +48,15 @@ describe("feature-view-utils", () => {
     );
   });
 
+  it("compacts long fallback status text for stage labels", () => {
+    expect(
+      toHumanStatusLabel(
+        "plan",
+        "Investigating stage placement details — https://cursor.com/agents/agt_1234567890abcdefghijkl"
+      )
+    ).toBe("Investigating stage placement details");
+  });
+
   it("derives task and merge figures from activity feed", () => {
     const steps = [
       { id: "step-0", ordinal: 0 },
@@ -131,5 +140,37 @@ describe("feature-view-utils", () => {
       state: "done",
       statusLabel: "Done ✓",
     });
+  });
+
+  it("returns task figures in ordinal order with auditor last", () => {
+    const derived = deriveAgentStageState(
+      [
+        {
+          id: "a1",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [2] "Later task" — https://cursor.com/agents/agt_task2 (branch: orch-task)',
+          createdAt: "2026-03-25T12:00:00.000Z",
+        },
+        {
+          id: "a2",
+          kind: "agent",
+          message:
+            'L2 agent launched for task [0] "Earlier task" — https://cursor.com/agents/agt_task0 (branch: orch-task)',
+          createdAt: "2026-03-25T12:01:00.000Z",
+        },
+        {
+          id: "a3",
+          kind: "merge",
+          message: "Merge auditor launched — https://cursor.com/agents/agt_auditor",
+          createdAt: "2026-03-25T12:02:00.000Z",
+        },
+      ],
+      [
+        { id: "step-0", ordinal: 0 },
+        { id: "step-2", ordinal: 2 },
+      ]
+    );
+    expect(derived.figures.map((f) => f.figureId)).toEqual(["task-0", "task-2", "merge-auditor"]);
   });
 });

@@ -105,9 +105,13 @@ function isFinishedNote(message: string): boolean {
 }
 
 function shortenLabel(message: string): string {
-  const compact = message.replace(/\s+/g, " ").trim();
+  const compact = message
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+[—-]\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!compact) return "Working";
-  return compact.length > 56 ? `${compact.slice(0, 55)}…` : compact;
+  return compact.length > 48 ? `${compact.slice(0, 47)}…` : compact;
 }
 
 export function toHumanStatusLabel(kind: string, message: string): string {
@@ -232,8 +236,17 @@ export function deriveAgentStageState(
     }
   }
 
+  const orderedFigures = Array.from(figures.values()).sort((a, b) => {
+    // Keep task figures in ordinal order and keep merge auditor last.
+    if (a.role !== b.role) return a.role === "agent" ? -1 : 1;
+    const aOrd = a.stepOrdinal ?? a.taskOrdinal ?? Number.MAX_SAFE_INTEGER;
+    const bOrd = b.stepOrdinal ?? b.taskOrdinal ?? Number.MAX_SAFE_INTEGER;
+    if (aOrd !== bOrd) return aOrd - bOrd;
+    return a.figureId.localeCompare(b.figureId);
+  });
+
   return {
-    figures: Array.from(figures.values()),
+    figures: orderedFigures,
     agentIdToFigure,
   };
 }
